@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './components/auth/AuthProvider';
 import { LoginForm } from './components/auth/LoginForm';
+import { Dashboard } from './components/dashboard/Dashboard';
 import { PlayerForm } from './components/player/PlayerForm';
 import { GroupAdForm } from './components/group/GroupAdForm';
 import { NotificationList } from './components/notifications/NotificationList';
@@ -13,7 +14,7 @@ import { ContactButton } from './components/common/ContactButton';
 import { DiagnosticPanel } from './components/common/DiagnosticPanel';
 import { LogOut } from 'lucide-react';
 
-type ViewType = 'player' | 'group' | 'browse' | 'notifications' | 'mygroup' | 'rate' | 'profile';
+type ViewType = 'dashboard' | 'player' | 'group' | 'browse' | 'notifications' | 'mygroup' | 'rate' | 'profile';
 
 /**
  * DUNE: AWAKENING PLAYER MATCHING - VERSÃO BETA
@@ -22,26 +23,27 @@ type ViewType = 'player' | 'group' | 'browse' | 'notifications' | 'mygroup' | 'r
  * 
  * FLUXO COMPLETO:
  * 1. LOGIN/CADASTRO: Autenticação segura com Supabase Auth
- * 2. CADASTRO (aba "Cadastro"): Jogador preenche perfil completo
- * 3. CRIAR ANÚNCIO (aba "Criar Anúncio"): Define grupo, funções e filtros
- * 4. NAVEGAR GRUPOS (aba "Explorar Grupos"): Lista grupos abertos para candidatura
- * 5. MATCHING AUTOMÁTICO: Sistema encontra jogadores compatíveis
- * 6. NOTIFICAÇÕES (aba "Notificações"): Jogadores recebem convites
- * 7. MEU GRUPO (aba "Meu Grupo"): Criador gerencia interessados
- * 8. FARMING: Grupo vai farmar no Deep Desert
- * 9. AVALIAR (aba "Avaliar Jogadores"): Membros se avaliam (30 min)
- * 10. PERFIL (aba "Perfil"): Reputação pública do jogador
+ * 2. DASHBOARD: Painel principal com visão geral (NOVA TELA PRINCIPAL)
+ * 3. CADASTRO: Jogador preenche perfil completo (agora acessível via Dashboard)
+ * 4. CRIAR ANÚNCIO: Define grupo, funções e filtros
+ * 5. NAVEGAR GRUPOS: Lista grupos abertos para candidatura
+ * 6. MATCHING AUTOMÁTICO: Sistema encontra jogadores compatíveis
+ * 7. NOTIFICAÇÕES: Jogadores recebem convites
+ * 8. MEU GRUPO: Criador gerencia interessados
+ * 9. FARMING: Grupo vai farmar no Deep Desert
+ * 10. AVALIAR: Membros se avaliam (30 min)
+ * 11. PERFIL: Reputação pública do jogador
  * 
  * TECNOLOGIAS:
  * - React + TypeScript + Vite
  * - Tailwind CSS + Lucide Icons
  * - Supabase (Auth + Database)
  * 
- * VERSÃO: Beta v2.1 (Janeiro 2025) - Com Navegação de Grupos
+ * VERSÃO: Beta v2.2 (Janeiro 2025) - Com Dashboard Principal
  */
 
 const AppContent: React.FC = () => {
-  const [currentView, setCurrentView] = useState<ViewType>('player');
+  const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const { user, signOut, loading } = useAuth();
 
   // Get environment from Vite env vars with fallback
@@ -58,12 +60,14 @@ const AppContent: React.FC = () => {
   const renderCurrentView = () => {
     try {
       switch (currentView) {
+        case 'dashboard':
+          return <Dashboard />; // NOVA: Tela principal do guerreiro
         case 'player':
-          return <PlayerForm />; // Cadastro completo do jogador
+          return <PlayerForm />; // Cadastro/edição do jogador
         case 'group':
           return <GroupAdForm />; // Criação de anúncios de grupo
         case 'browse':
-          return <GroupBrowser />; // NOVA: Navegação de grupos abertos
+          return <GroupBrowser />; // Navegação de grupos abertos
         case 'notifications':
           return <NotificationList />; // Convites recebidos
         case 'mygroup':
@@ -73,7 +77,7 @@ const AppContent: React.FC = () => {
         case 'profile':
           return <PlayerProfile />; // Perfil público com reputação
         default:
-          return <PlayerForm />;
+          return <Dashboard />;
       }
     } catch (error) {
       console.error('Erro ao renderizar view:', error);
@@ -89,11 +93,11 @@ const AppContent: React.FC = () => {
   };
 
   const navigationItems = [
-    { id: 'player', label: 'Cadastro', icon: '👤' },
+    { id: 'dashboard', label: 'Painel', icon: '🏛️' },
     { id: 'group', label: 'Criar Anúncio', icon: '⚔️' },
     { id: 'browse', label: 'Explorar Grupos', icon: '🔍' },
     { id: 'notifications', label: 'Notificações', icon: '📡' },
-    { id: 'mygroup', label: 'Meu Grupo', icon: '🏛️' },
+    { id: 'mygroup', label: 'Meu Grupo', icon: '👥' },
     { id: 'rate', label: 'Avaliar', icon: '⭐' },
     { id: 'profile', label: 'Perfil', icon: '🏆' }
   ];

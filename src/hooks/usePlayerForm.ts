@@ -23,8 +23,8 @@ const initialFormData: PlayerData = {
 export const usePlayerForm = () => {
   const [formData, setFormData] = useState<PlayerData>(initialFormData);
   const [gameIdLocked, setGameIdLocked] = useState(false);
-  const [isRegistered, setIsRegistered] = useState(false); // Novo estado para controlar se já está cadastrado
-  const [isEditMode, setIsEditMode] = useState(false); // Novo estado para modo de edição
+  const [isRegistered, setIsRegistered] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
@@ -43,7 +43,7 @@ export const usePlayerForm = () => {
           const playerFormData = playerService.convertDbToFormData(existingPlayer);
           setFormData({ ...playerFormData, email: user.email });
           setGameIdLocked(true);
-          setIsRegistered(true); // Jogador já está cadastrado
+          setIsRegistered(true);
         } else {
           // Novo jogador - preencher email automaticamente
           setFormData(prev => ({ ...prev, email: user.email }));
