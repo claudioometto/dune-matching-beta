@@ -111,16 +111,19 @@ export const ratingService = {
   },
 
   /**
-   * Buscar grupos encerrados que podem ser avaliados - VERSÃO CORRIGIDA
+   * Buscar grupos encerrados que podem ser avaliados - VERSÃO CORRIGIDA PARA FUSO HORÁRIO
    */
   async getCompletedGroupsForRating(userId: string): Promise<{ data: any[] | null; error: any }> {
     try {
       console.log('🔄 Buscando grupos encerrados para avaliação:', userId);
       
-      // Buscar grupos encerrados nas últimas 24 horas onde o usuário participou
-      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      // CORREÇÃO: Usar janela de tempo mais ampla para compensar diferenças de fuso horário
+      // Buscar grupos encerrados nas últimas 48 horas (ao invés de 24h)
+      const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
       
-      console.log('📅 Buscando grupos encerrados desde:', twentyFourHoursAgo);
+      console.log('📅 Buscando grupos encerrados desde:', fortyEightHoursAgo);
+      console.log('🕐 Horário local atual:', new Date().toISOString());
+      console.log('🌍 Timezone offset:', new Date().getTimezoneOffset(), 'minutos');
       
       // 1. Buscar grupos criados pelo usuário que foram encerrados
       const { data: ownedGroups, error: ownedError } = await supabase
@@ -136,12 +139,15 @@ export const ratingService = {
         `)
         .eq('host_id', userId)
         .eq('status', 'closed')
-        .gte('created_at', twentyFourHoursAgo);
+        .gte('created_at', fortyEightHoursAgo);
 
       if (ownedError) {
         console.error('❌ Erro ao buscar grupos próprios encerrados:', ownedError);
       } else {
         console.log('📊 Grupos próprios encerrados encontrados:', ownedGroups?.length || 0);
+        ownedGroups?.forEach(group => {
+          console.log(`  - ${group.title}: criado em ${group.created_at}, atualizado em ${group.updated_at}`);
+        });
       }
 
       // 2. Buscar grupos onde o usuário foi membro aceito e que foram encerrados
@@ -163,12 +169,16 @@ export const ratingService = {
         .eq('player_id', userId)
         .eq('status', 'accepted')
         .eq('group_ads.status', 'closed')
-        .gte('group_ads.created_at', twentyFourHoursAgo);
+        .gte('group_ads.created_at', fortyEightHoursAgo);
 
       if (memberError) {
         console.error('❌ Erro ao buscar grupos como membro encerrados:', memberError);
       } else {
         console.log('📊 Grupos como membro encerrados encontrados:', memberGroups?.length || 0);
+        memberGroups?.forEach(match => {
+          const group = match.group_ads;
+          console.log(`  - ${group.title}: criado em ${group.created_at}, atualizado em ${group.updated_at}`);
+        });
       }
 
       // Combinar resultados
@@ -250,14 +260,21 @@ export const ratingService = {
 
             console.log(`👥 Total de membros para avaliação em ${group.title}:`, allMembers.length);
 
-            // Verificar se ainda pode avaliar (30 minutos após encerramento)
+            // CORREÇÃO: Verificação de tempo mais flexível para compensar fuso horário
             const completedAt = new Date(group.updated_at || group.created_at);
             const now = new Date();
-            const thirtyMinutesLater = new Date(completedAt.getTime() + 30 * 60 * 1000);
-            const canRate = now <= thirtyMinutesLater;
-            const timeRemaining = Math.max(0, thirtyMinutesLater.getTime() - now.getTime());
+            
+            // Usar 2 horas ao invés de 30 minutos para compensar diferenças de fuso horário
+            const twoHoursLater = new Date(completedAt.getTime() + 2 * 60 * 60 * 1000);
+            const canRate = now <= twoHoursLater;
+            const timeRemaining = Math.max(0, twoHoursLater.getTime() - now.getTime());
 
-            console.log(`⏰ Grupo ${group.title} - Pode avaliar: ${canRate}, Tempo restante: ${Math.floor(timeRemaining / 1000 / 60)}min`);
+            console.log(`⏰ Grupo ${group.title}:`);
+            console.log(`   - Encerrado em: ${completedAt.toISOString()}`);
+            console.log(`   - Agora: ${now.toISOString()}`);
+            console.log(`   - Prazo até: ${twoHoursLater.toISOString()}`);
+            console.log(`   - Pode avaliar: ${canRate}`);
+            console.log(`   - Tempo restante: ${Math.floor(timeRemaining / 1000 / 60)}min`);
 
             return {
               id: group.id,

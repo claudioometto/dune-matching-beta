@@ -57,7 +57,10 @@ export const RatePlayers: React.FC = () => {
       setDebugInfo({ 
         groupsFound: data?.length || 0, 
         groups: data,
-        userId: user.id 
+        userId: user.id,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        localTime: new Date().toISOString(),
+        timezoneOffset: new Date().getTimezoneOffset()
       });
       
       // Se há apenas um grupo, selecioná-lo automaticamente
@@ -85,8 +88,9 @@ export const RatePlayers: React.FC = () => {
     const interval = setInterval(() => {
       const now = new Date().getTime();
       const completedAt = new Date(selectedGroup.completed_at).getTime();
-      const thirtyMinutesLater = completedAt + (30 * 60 * 1000);
-      const remaining = Math.max(0, thirtyMinutesLater - now);
+      // Usar 2 horas ao invés de 30 minutos para compensar fuso horário
+      const twoHoursLater = completedAt + (2 * 60 * 60 * 1000);
+      const remaining = Math.max(0, twoHoursLater - now);
       
       setTimeRemaining(remaining);
       
@@ -220,9 +224,9 @@ export const RatePlayers: React.FC = () => {
   };
 
   const formatTimeRemaining = (ms: number) => {
-    const minutes = Math.floor(ms / (1000 * 60));
-    const seconds = Math.floor((ms % (1000 * 60)) / 1000);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    const hours = Math.floor(ms / (1000 * 60 * 60));
+    const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+    return `${hours}h ${minutes}m`;
   };
 
   const getCurrentUserNickname = () => {
@@ -286,10 +290,22 @@ export const RatePlayers: React.FC = () => {
         {process.env.NODE_ENV === 'development' && debugInfo && (
           <div className="max-w-4xl mx-auto mb-8">
             <div className="bg-blue-900/30 rounded-lg p-4 border border-blue-500/30">
-              <h3 className="text-blue-200 font-bold mb-2">🔍 Debug Info (Dev Only)</h3>
-              <pre className="text-xs text-blue-100 overflow-auto max-h-40">
-                {JSON.stringify(debugInfo, null, 2)}
-              </pre>
+              <h3 className="text-blue-200 font-bold mb-2">🔍 Debug Info - Fuso Horário (Dev Only)</h3>
+              <div className="text-xs text-blue-100 space-y-1">
+                <p><strong>Timezone:</strong> {debugInfo.timezone}</p>
+                <p><strong>Horário Local:</strong> {debugInfo.localTime}</p>
+                <p><strong>Offset (min):</strong> {debugInfo.timezoneOffset}</p>
+                <p><strong>Grupos encontrados:</strong> {debugInfo.groupsFound}</p>
+                {debugInfo.error && (
+                  <p className="text-red-300"><strong>Erro:</strong> {debugInfo.error.message}</p>
+                )}
+              </div>
+              <details className="mt-2">
+                <summary className="cursor-pointer text-blue-300">Ver dados completos</summary>
+                <pre className="text-xs text-blue-100 overflow-auto max-h-40 mt-2">
+                  {JSON.stringify(debugInfo, null, 2)}
+                </pre>
+              </details>
             </div>
           </div>
         )}
@@ -351,7 +367,7 @@ export const RatePlayers: React.FC = () => {
                         <div className="flex items-center justify-center gap-2 bg-green-900/30 px-6 py-3 rounded-full border border-green-500/50">
                           <Clock className="w-5 h-5 text-green-400" />
                           <span className="text-green-200 font-medium">
-                            Tempo restante: {formatTimeRemaining(timeRemaining)}
+                            Tempo restante: {formatTimeRemaining(timeRemaining)} (janela estendida para fuso horário)
                           </span>
                         </div>
                       ) : (
@@ -459,7 +475,7 @@ export const RatePlayers: React.FC = () => {
                           Tempo para Avaliação Expirado
                         </h3>
                         <p className="text-red-300">
-                          O prazo de 30 minutos para avaliar este grupo já passou.
+                          O prazo de 2 horas para avaliar este grupo já passou.
                         </p>
                       </div>
                     ) : (
@@ -494,7 +510,7 @@ export const RatePlayers: React.FC = () => {
                 <div className="bg-orange-900/30 p-6 rounded-xl border border-orange-500/30 mb-6">
                   <p className="text-sm text-orange-200 tracking-wide">
                     ⭐ <strong>Como funciona:</strong> Após participar de uma expedição que seja encerrada, 
-                    você terá 30 minutos para avaliar seus companheiros de grupo.
+                    você terá 2 horas para avaliar seus companheiros de grupo.
                   </p>
                 </div>
 
@@ -505,6 +521,8 @@ export const RatePlayers: React.FC = () => {
                     <div className="text-sm text-blue-300">
                       <p>• Usuário ID: {debugInfo.userId}</p>
                       <p>• Grupos encontrados: {debugInfo.groupsFound || 0}</p>
+                      <p>• Timezone: {debugInfo.timezone}</p>
+                      <p>• Offset: {debugInfo.timezoneOffset} min</p>
                       {debugInfo.error && (
                         <p className="text-red-300">• Erro: {debugInfo.error.message}</p>
                       )}
