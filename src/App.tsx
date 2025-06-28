@@ -9,6 +9,7 @@ import { RatePlayers } from './components/ratings/RatePlayers';
 import { PlayerProfile } from './components/player/PlayerProfile';
 import { EnvironmentBadge } from './components/common/EnvironmentBadge';
 import { ContactButton } from './components/common/ContactButton';
+import { DiagnosticPanel } from './components/common/DiagnosticPanel';
 import { LogOut } from 'lucide-react';
 
 type ViewType = 'player' | 'group' | 'notifications' | 'mygroup' | 'rate' | 'profile';
@@ -265,6 +266,9 @@ const AppContent: React.FC = () => {
 
       {/* Contact Button - Redesenhado */}
       <ContactButton />
+
+      {/* Diagnostic Panel - Novo */}
+      <DiagnosticPanel />
     </div>
   );
 };
