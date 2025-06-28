@@ -12,12 +12,26 @@ export const GroupAdForm: React.FC = () => {
     errors,
     loading,
     hasActiveGroup,
+    checkingActiveGroup,
     handleInputChange,
     handleRoleChange,
     handleFilterInterestToggle,
     handleFilterToolToggle,
     handleSubmit
   } = useGroupAdForm();
+
+  // Loading state enquanto verifica grupos ativos
+  if (checkingActiveGroup) {
+    return (
+      <div className="min-h-screen relative flex items-center justify-center">
+        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/30 to-black/50"></div>
+        <div className="relative z-10 text-center">
+          <div className="w-16 h-16 border-4 border-orange-500/30 border-t-orange-500 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-orange-200 text-lg tracking-wide">Verificando grupos ativos...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Se já tem grupo ativo, mostrar mensagem de bloqueio
   if (hasActiveGroup) {

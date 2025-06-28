@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { GroupAdData, GroupAdErrors } from '../types/group';
 import { groupService } from '../services/groupService';
 import { useAuth } from '../components/auth/AuthProvider';
@@ -29,23 +29,36 @@ export const useGroupAdForm = () => {
   const [errors, setErrors] = useState<GroupAdErrors>({});
   const [loading, setLoading] = useState(false);
   const [hasActiveGroup, setHasActiveGroup] = useState(false);
+  const [checkingActiveGroup, setCheckingActiveGroup] = useState(true);
   const { user } = useAuth();
 
   // Verificar se o usuário já tem um grupo ativo
   const checkActiveGroup = async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setCheckingActiveGroup(false);
+      return;
+    }
 
     try {
-      const { data: userGroups } = await groupService.getUserGroups(user.id);
-      const activeGroups = userGroups?.filter(group => group.status === 'open') || [];
-      setHasActiveGroup(activeGroups.length > 0);
+      const { data: userGroups, error } = await groupService.getUserGroups(user.id);
+      
+      if (error) {
+        console.error('Erro ao verificar grupos ativos:', error);
+        setHasActiveGroup(false);
+      } else {
+        const activeGroups = userGroups?.filter(group => group.status === 'open') || [];
+        setHasActiveGroup(activeGroups.length > 0);
+      }
     } catch (error) {
       console.error('Erro ao verificar grupos ativos:', error);
+      setHasActiveGroup(false);
+    } finally {
+      setCheckingActiveGroup(false);
     }
   };
 
   // Verificar grupos ativos quando o componente carrega
-  React.useEffect(() => {
+  useEffect(() => {
     checkActiveGroup();
   }, [user]);
 
@@ -171,6 +184,7 @@ export const useGroupAdForm = () => {
     errors,
     loading,
     hasActiveGroup,
+    checkingActiveGroup,
     handleInputChange,
     handleRoleChange,
     handleFilterInterestToggle,
