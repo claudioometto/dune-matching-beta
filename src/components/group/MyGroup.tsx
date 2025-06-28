@@ -1,31 +1,69 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Target, Crown, UserCheck, AlertTriangle } from 'lucide-react';
+import { Users, Target, Crown, UserCheck, AlertTriangle, UserX, Clock, Star } from 'lucide-react';
 import { groupService } from '../../services/groupService';
 import { useAuth } from '../auth/AuthProvider';
-import type { ActiveGroup } from '../../types/notification';
+
+interface GroupMember {
+  id: string;
+  status: 'invited' | 'accepted' | 'declined';
+  created_at: string;
+  players: {
+    id: string;
+    nickname: string;
+    name: string;
+    game_level: number;
+  };
+}
 
 export const MyGroup: React.FC = () => {
   const [groups, setGroups] = useState<any[]>([]);
+  const [groupMembers, setGroupMembers] = useState<{ [groupId: string]: GroupMember[] }>({});
   const [loading, setLoading] = useState(true);
   const [showConfirmClose, setShowConfirmClose] = useState<string | null>(null);
+  const [processingAction, setProcessingAction] = useState<string | null>(null);
   const { user } = useAuth();
 
-  // Carregar grupos do usuário
+  // Carregar grupos do usuário e seus membros
   useEffect(() => {
     const loadUserGroups = async () => {
       if (!user?.id) return;
 
       try {
+        console.log('🔄 Carregando grupos do usuário:', user.id);
+        
         const { data, error } = await groupService.getUserGroups(user.id);
         
         if (error) {
-          console.error('Erro ao carregar grupos:', error);
+          console.error('❌ Erro ao carregar grupos:', error);
           return;
         }
 
+        console.log('✅ Grupos encontrados:', data?.length || 0);
         setGroups(data || []);
+
+        // Carregar membros para cada grupo ativo
+        if (data && data.length > 0) {
+          const activeGroups = data.filter(group => group.status === 'open');
+          
+          for (const group of activeGroups) {
+            console.log('🔄 Carregando membros do grupo:', group.id);
+            
+            const { data: members, error: membersError } = await groupService.getGroupMembers(group.id);
+            
+            if (membersError) {
+              console.error('❌ Erro ao carregar membros do grupo:', group.id, membersError);
+            } else {
+              console.log('✅ Membros encontrados para grupo', group.id, ':', members?.length || 0);
+              setGroupMembers(prev => ({
+                ...prev,
+                [group.id]: members || []
+              }));
+            }
+          }
+        }
+
       } catch (error) {
-        console.error('Erro ao carregar grupos:', error);
+        console.error('💥 Erro inesperado ao carregar grupos:', error);
       } finally {
         setLoading(false);
       }
@@ -34,12 +72,81 @@ export const MyGroup: React.FC = () => {
     loadUserGroups();
   }, [user]);
 
+  const handleAcceptMember = async (groupId: string, matchId: string, memberNickname: string) => {
+    setProcessingAction(matchId);
+    
+    try {
+      console.log('✅ Aceitando membro:', { groupId, matchId, memberNickname });
+      
+      const { error } = await groupService.acceptInvitation(matchId);
+      
+      if (error) {
+        console.error('❌ Erro ao aceitar membro:', error);
+        alert(`❌ Erro ao aceitar ${memberNickname}: ${error.message}`);
+        return;
+      }
+
+      // Atualizar lista local
+      setGroupMembers(prev => ({
+        ...prev,
+        [groupId]: prev[groupId]?.map(member => 
+          member.id === matchId 
+            ? { ...member, status: 'accepted' as const }
+            : member
+        ) || []
+      }));
+      
+      console.log('✅ Membro aceito com sucesso');
+      alert(`✅ ${memberNickname} foi aceito no grupo!`);
+      
+    } catch (error) {
+      console.error('💥 Erro inesperado ao aceitar membro:', error);
+      alert('❌ Erro inesperado. Tente novamente.');
+    } finally {
+      setProcessingAction(null);
+    }
+  };
+
+  const handleRejectMember = async (groupId: string, matchId: string, memberNickname: string) => {
+    setProcessingAction(matchId);
+    
+    try {
+      console.log('❌ Rejeitando membro:', { groupId, matchId, memberNickname });
+      
+      const { error } = await groupService.rejectInvitation(matchId);
+      
+      if (error) {
+        console.error('❌ Erro ao rejeitar membro:', error);
+        alert(`❌ Erro ao rejeitar ${memberNickname}: ${error.message}`);
+        return;
+      }
+
+      // Atualizar lista local
+      setGroupMembers(prev => ({
+        ...prev,
+        [groupId]: prev[groupId]?.map(member => 
+          member.id === matchId 
+            ? { ...member, status: 'declined' as const }
+            : member
+        ) || []
+      }));
+      
+      console.log('✅ Membro rejeitado com sucesso');
+      
+    } catch (error) {
+      console.error('💥 Erro inesperado ao rejeitar membro:', error);
+      alert('❌ Erro inesperado. Tente novamente.');
+    } finally {
+      setProcessingAction(null);
+    }
+  };
+
   const handleCloseGroup = async (groupId: string) => {
     try {
       const { error } = await groupService.updateGroupStatus(groupId, 'closed');
       
       if (error) {
-        console.error('Erro ao encerrar grupo:', error);
+        console.error('❌ Erro ao encerrar grupo:', error);
         alert('❌ Erro ao encerrar grupo: ' + error.message);
         return;
       }
@@ -56,7 +163,7 @@ export const MyGroup: React.FC = () => {
       setShowConfirmClose(null);
       alert('✅ Grupo encerrado com sucesso!');
     } catch (error) {
-      console.error('Erro ao encerrar grupo:', error);
+      console.error('💥 Erro inesperado ao encerrar grupo:', error);
       alert('❌ Erro inesperado ao encerrar grupo.');
     }
   };
@@ -70,12 +177,19 @@ export const MyGroup: React.FC = () => {
     }).format(new Date(date));
   };
 
-  // Calcular vagas disponíveis (excluindo o líder)
-  const getAvailableSlots = (group: any) => {
-    const totalSlots = 4;
-    const leaderSlot = 1; // O líder sempre ocupa 1 slot
-    const occupiedSlots = 0; // Por enquanto, apenas o líder está no grupo
-    return totalSlots - leaderSlot - occupiedSlots;
+  const getGroupStats = (group: any) => {
+    const members = groupMembers[group.id] || [];
+    const interestedCount = members.filter(m => m.status === 'invited').length;
+    const acceptedCount = members.filter(m => m.status === 'accepted').length;
+    const totalOccupied = 1 + acceptedCount; // 1 (líder) + aceitos
+    const availableSlots = group.max_members - totalOccupied;
+    
+    return {
+      interestedCount,
+      acceptedCount,
+      totalOccupied,
+      availableSlots: Math.max(0, availableSlots)
+    };
   };
 
   if (loading) {
@@ -84,7 +198,7 @@ export const MyGroup: React.FC = () => {
         <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/30 to-black/50"></div>
         <div className="relative z-10 text-center">
           <div className="w-16 h-16 border-4 border-orange-500/30 border-t-orange-500 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-orange-200 text-lg tracking-wide">Carregando seus grupos...</p>
+          <p className="text-orange-200 text-lg tracking-wide">Carregando suas alianças...</p>
         </div>
       </div>
     );
@@ -118,7 +232,10 @@ export const MyGroup: React.FC = () => {
           {activeGroups.length > 0 ? (
             <div className="space-y-8">
               {activeGroups.map(group => {
-                const availableSlots = getAvailableSlots(group);
+                const stats = getGroupStats(group);
+                const members = groupMembers[group.id] || [];
+                const interestedMembers = members.filter(m => m.status === 'invited');
+                const acceptedMembers = members.filter(m => m.status === 'accepted');
                 
                 return (
                   <div key={group.id} className="relative">
@@ -141,43 +258,160 @@ export const MyGroup: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Group Info - Corrigida a contagem */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                      {/* Group Stats */}
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                         <div className="bg-amber-900/30 p-4 rounded-lg border border-amber-500/30">
-                          <div className="text-2xl font-bold text-amber-300">4</div>
+                          <div className="text-2xl font-bold text-amber-300">{group.max_members}</div>
                           <div className="text-sm text-amber-200">Slots Totais</div>
                         </div>
                         <div className="bg-blue-900/30 p-4 rounded-lg border border-blue-500/30">
-                          <div className="text-2xl font-bold text-blue-300">0</div>
+                          <div className="text-2xl font-bold text-blue-300">{stats.interestedCount}</div>
                           <div className="text-sm text-blue-200">Interessados</div>
                         </div>
+                        <div className="bg-purple-900/30 p-4 rounded-lg border border-purple-500/30">
+                          <div className="text-2xl font-bold text-purple-300">{stats.acceptedCount}</div>
+                          <div className="text-sm text-purple-200">Aceitos</div>
+                        </div>
                         <div className="bg-green-900/30 p-4 rounded-lg border border-green-500/30">
-                          <div className="text-2xl font-bold text-green-300">{availableSlots}</div>
-                          <div className="text-sm text-green-200">Vagas Disponíveis</div>
+                          <div className="text-2xl font-bold text-green-300">{stats.availableSlots}</div>
+                          <div className="text-sm text-green-200">Vagas Livres</div>
                         </div>
                       </div>
 
                       {/* Roles Grid */}
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                        {group.roles_needed.map((role: string, index: number) => (
-                          <div key={index} className={`p-4 rounded-lg border-2 ${
-                            index === 0 ? 'bg-amber-900/30 border-amber-500/50' : 'bg-gray-900/30 border-gray-500/30'
-                          }`}>
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="font-medium text-orange-200">Slot {index + 1}</span>
-                              {index === 0 && <Crown className="w-4 h-4 text-amber-400" />}
+                        {group.roles_needed.map((role: string, index: number) => {
+                          const isLeaderSlot = index === 0;
+                          const assignedMember = acceptedMembers[index - 1]; // -1 porque o líder não está na lista
+                          
+                          return (
+                            <div key={index} className={`p-4 rounded-lg border-2 ${
+                              isLeaderSlot 
+                                ? 'bg-amber-900/30 border-amber-500/50' 
+                                : assignedMember
+                                ? 'bg-green-900/30 border-green-500/50'
+                                : 'bg-gray-900/30 border-gray-500/30'
+                            }`}>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="font-medium text-orange-200">Slot {index + 1}</span>
+                                {isLeaderSlot && <Crown className="w-4 h-4 text-amber-400" />}
+                                {assignedMember && <UserCheck className="w-4 h-4 text-green-400" />}
+                              </div>
+                              <div className="text-sm text-orange-300 mb-1">Função: {role}</div>
+                              <div className="text-sm font-medium">
+                                {isLeaderSlot ? (
+                                  <span className="text-amber-300">Você (Líder)</span>
+                                ) : assignedMember ? (
+                                  <span className="text-green-300">{assignedMember.players.nickname}</span>
+                                ) : (
+                                  <span className="text-gray-400">Vago</span>
+                                )}
+                              </div>
                             </div>
-                            <div className="text-sm text-orange-300 mb-1">Função: {role}</div>
-                            <div className="text-sm font-medium">
-                              {index === 0 ? (
-                                <span className="text-amber-300">Você (Líder)</span>
-                              ) : (
-                                <span className="text-gray-400">Vago</span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
+
+                      {/* Interested Members Section */}
+                      {interestedMembers.length > 0 && (
+                        <div className="mb-6">
+                          <h3 className="text-lg font-bold text-orange-200 mb-4 flex items-center gap-2">
+                            <Clock className="w-5 h-5 text-orange-400" />
+                            Candidatos Aguardando Aprovação ({interestedMembers.length})
+                          </h3>
+                          
+                          <div className="space-y-3">
+                            {interestedMembers.map(member => (
+                              <div key={member.id} className="bg-blue-900/20 p-4 rounded-lg border border-blue-500/30">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                                      <span className="text-white font-bold text-sm">
+                                        {member.players.nickname.charAt(0).toUpperCase()}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <div className="font-medium text-blue-200">{member.players.nickname}</div>
+                                      <div className="text-sm text-blue-300/80">
+                                        Nível {member.players.game_level} • Candidatou-se em {formatDate(member.created_at)}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => handleAcceptMember(group.id, member.id, member.players.nickname)}
+                                      disabled={processingAction === member.id || stats.availableSlots === 0}
+                                      className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                    >
+                                      {processingAction === member.id ? (
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                      ) : (
+                                        <UserCheck className="w-4 h-4" />
+                                      )}
+                                      {stats.availableSlots === 0 ? 'Grupo Lotado' : 'Aceitar'}
+                                    </button>
+                                    
+                                    <button
+                                      onClick={() => handleRejectMember(group.id, member.id, member.players.nickname)}
+                                      disabled={processingAction === member.id}
+                                      className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                    >
+                                      {processingAction === member.id ? (
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                      ) : (
+                                        <UserX className="w-4 h-4" />
+                                      )}
+                                      Rejeitar
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Accepted Members Section */}
+                      {acceptedMembers.length > 0 && (
+                        <div className="mb-6">
+                          <h3 className="text-lg font-bold text-orange-200 mb-4 flex items-center gap-2">
+                            <Star className="w-5 h-5 text-orange-400" />
+                            Membros Confirmados ({acceptedMembers.length})
+                          </h3>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {acceptedMembers.map(member => (
+                              <div key={member.id} className="bg-green-900/20 p-4 rounded-lg border border-green-500/30">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center">
+                                    <span className="text-white font-bold text-sm">
+                                      {member.players.nickname.charAt(0).toUpperCase()}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <div className="font-medium text-green-200">{member.players.nickname}</div>
+                                    <div className="text-sm text-green-300/80">
+                                      Nível {member.players.game_level} • Confirmado
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* No candidates message */}
+                      {interestedMembers.length === 0 && acceptedMembers.length === 0 && (
+                        <div className="bg-gray-900/30 p-6 rounded-lg border border-gray-500/30 mb-6 text-center">
+                          <Clock className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                          <p className="text-gray-300">Nenhum guerreiro se candidatou ainda</p>
+                          <p className="text-gray-400 text-sm mt-1">
+                            Aguarde candidaturas ou divulgue sua expedição
+                          </p>
+                        </div>
+                      )}
 
                       {/* Group Actions */}
                       <div className="flex justify-between items-center">
