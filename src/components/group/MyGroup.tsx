@@ -189,6 +189,8 @@ export const MyGroup: React.FC = () => {
 
   const handleCloseGroup = async (groupId: string) => {
     try {
+      console.log('🔄 Encerrando grupo:', groupId);
+      
       const { error } = await groupService.updateGroupStatus(groupId, 'closed');
       
       if (error) {
@@ -201,7 +203,10 @@ export const MyGroup: React.FC = () => {
       setGroups([]);
       setUserGroupInfo(null);
       setShowConfirmClose(null);
-      alert('✅ Grupo encerrado com sucesso!');
+      
+      console.log('✅ Grupo encerrado com sucesso');
+      alert('✅ Grupo encerrado com sucesso! Agora você pode avaliar os membros na aba "Avaliar Jogadores".');
+      
     } catch (error) {
       console.error('💥 Erro inesperado ao encerrar grupo:', error);
       alert('❌ Erro inesperado ao encerrar grupo.');
@@ -576,9 +581,14 @@ export const MyGroup: React.FC = () => {
                 <div className="text-center mb-6">
                   <AlertTriangle className="w-12 h-12 text-red-400 mx-auto mb-4" />
                   <h3 className="text-xl font-bold text-red-200 mb-2">Encerrar Aliança</h3>
-                  <p className="text-red-300/80">
+                  <p className="text-red-300/80 mb-4">
                     Tem certeza que deseja encerrar esta expedição? Esta ação não pode ser desfeita e todos os membros serão removidos.
                   </p>
+                  <div className="bg-green-900/30 p-3 rounded-lg border border-green-500/30">
+                    <p className="text-green-200 text-sm">
+                      ⭐ <strong>Após encerrar:</strong> Você poderá avaliar os membros na aba "Avaliar Jogadores" por 30 minutos.
+                    </p>
+                  </div>
                 </div>
                 
                 <div className="flex gap-3">
