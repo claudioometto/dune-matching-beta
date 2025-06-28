@@ -1,0 +1,753 @@
+# DOCUMENTAÇÃO DO PROJETO - DUNE: AWAKENING PLAYER MATCHING
+# ========================================================
+
+## VISÃO GERAL DO PROJETO
+Este é um aplicativo web desenvolvido para jogadores solo do jogo "Dune: Awakening" que não fazem parte de guildas mas desejam formar grupos seguros e temporários para farmar no Deep Desert. A plataforma permite o encontro entre jogadores com perfis compatíveis através de um sistema de anúncios, matching inteligente e avaliação entre jogadores.
+
+## ORGANIZAÇÃO DO PROJETO (3 ESTEIRAS)
+
+### 🎯 ESTEIRA 1: Bolt Playground (desenvolvimento ativo)
+- **Propósito**: Desenvolvimento iterativo, prototipagem rápida e validações
+- **Características**: 
+  - Recebe prompts e novas funcionalidades diretamente
+  - Não atualiza repositório Git automaticamente
+  - Ambiente de experimentação e testes rápidos
+- **Status**: Ativo (versão principal de desenvolvimento)
+
+### 🎯 ESTEIRA 2: Repositório Git Beta (testes com usuários)
+- **Propósito**: Versão estável para testes com usuários e feedbacks
+- **Características**:
+  - Código limpo e documentado
+  - Persistência em localStorage
+  - Pronto para deploy (Vercel)
+  - README completo com instruções
+- **Status**: Preparado para export e upload manual no GitHub
+- **Arquivos adicionais**:
+  - `README.md`: Documentação completa do projeto
+  - `LICENSE`: Licença MIT
+  - `.gitignore`: Configurado para Vite/Node.js
+  - `deployment/`: Guias de build e deploy
+
+### 🎯 ESTEIRA 3: Versão Produção (futuro)
+- **Propósito**: Versão final com banco de dados e autenticação
+- **Características**:
+  - Integração com Supabase
+  - Sistema de autenticação real
+  - Notificações em tempo real
+  - Chat interno dos grupos
+- **Status**: Planejado (não implementado)
+
+## TECNOLOGIAS UTILIZADAS
+- React 18.3.1 com TypeScript
+- Vite (bundler e dev server)
+- Tailwind CSS (estilização)
+- Lucide React (ícones)
+- ESLint (linting)
+- LocalStorage (persistência temporária - Esteira 2)
+
+## ESTRUTURA MODULAR DO PROJETO
+
+### 1. TIPOS E INTERFACES
+
+#### src/types/player.ts
+Define as interfaces do sistema de cadastro de jogadores:
+```typescript
+interface PlayerData {
+  nickname: string;           // Nome do jogador no jogo
+  gameId: string;            // ID único no jogo (não editável após primeiro cadastro)
+  email: string;             // E-mail do jogador
+  age: string;               // Idade (13-100 anos)
+  server: string;            // Servidor do jogo
+  level: string;             // Level atual (1-60)
+  weaponTier: string;        // Tier das armas (T1-T6)
+  armorTier: string;         // Tier da armadura (T1-T6)
+  ornithopterTier: string;   // Tier do ornicóptero (T1-T6)
+  miningToolsTier: string;   // Tier das ferramentas de minério (T1-T6)
+  spiceToolsTier: string;    // Tier das ferramentas de especiaria (T1-T6)
+  interests: string[];       // Interesses (Coleta, PvP)
+  hasDeepDesertBase: boolean; // Possui base no Deep Desert
+  baseSector: string;        // Setor da base (A1-I9)
+}
+
+interface FormErrors {
+  [key: string]: string;     // Mapeamento de erros por campo
+}
+```
+
+#### src/types/group.ts
+Define as interfaces do sistema de anúncios de grupo:
+```typescript
+interface GroupRole {
+  id: string;                // Identificador único do slot
+  type: 'Coleta' | 'Ataque'; // Tipo da função no grupo
+  isOwner: boolean;          // Se é o slot do criador do anúncio
+  playerName?: string;       // Nome do jogador (preenchido para o owner)
+}
+
+interface GroupAdData {
+  groupName: string;         // Nome do grupo
+  objective: 'Coleta' | 'PvP' | ''; // Objetivo principal
+  roles: GroupRole[];        // Array com 4 slots de funções
+  filters: {                 // Filtros para matching (todos opcionais)
+    minLevel: string;
+    interests: string[];
+    minWeaponTier: string;
+    minArmorTier: string;
+    minOrnithopterTier: string;
+    requiresDeepDesertBase: boolean;
+    specificSector: string;
+    requiredTools: string[];
+  };
+}
+
+interface GroupAdErrors {
+  [key: string]: string;     // Mapeamento de erros por campo
+}
+```
+
+#### src/types/notification.ts
+Define as interfaces do sistema de notificações e gerenciamento de grupos:
+```typescript
+interface Invitation {
+  id: string;                // ID único do convite
+  groupName: string;         // Nome do grupo
+  groupObjective: 'Coleta' | 'PvP'; // Objetivo do grupo
+  groupCreator: string;      // Nome do criador
+  roles: GroupRole[];        // Funções do grupo
+  playerEmail: string;       // E-mail do jogador convidado
+  playerNickname: string;    // Nickname do jogador convidado
+  createdAt: Date;          // Data de criação do convite
+  status: 'pending' | 'accepted' | 'rejected'; // Status do convite
+}
+
+interface GroupMember {
+  id: string;               // ID único do membro
+  nickname: string;         // Nickname do jogador
+  gameId: string;          // ID no jogo
+  level: string;           // Level do jogador
+  proposedRole: 'Coleta' | 'Ataque'; // Função proposta
+  status: 'interested' | 'selected' | 'rejected'; // Status no grupo
+  joinedAt: Date;          // Data de interesse
+}
+
+interface ActiveGroup {
+  id: string;              // ID único do grupo
+  groupName: string;       // Nome do grupo
+  objective: 'Coleta' | 'PvP'; // Objetivo
+  creator: string;         // Criador do grupo
+  roles: GroupRole[];      // Funções com status de preenchimento
+  members: GroupMember[];  // Membros interessados/selecionados
+  waitingList: GroupMember[]; // Lista de espera
+  createdAt: Date;        // Data de criação
+  isActive: boolean;      // Se o grupo está ativo
+}
+```
+
+#### src/types/ratings.ts
+Define as interfaces do sistema de avaliação entre jogadores:
+```typescript
+interface PlayerRating {
+  fromNickname: string;    // Quem avaliou
+  toNickname: string;      // Quem foi avaliado
+  groupId: string;         // ID do grupo onde jogaram juntos
+  stars: number;           // Avaliação de 1 a 5 estrelas
+  comment?: string;        // Comentário opcional (máx 200 chars)
+  createdAt: Date;        // Data da avaliação
+}
+
+interface RatingFormData {
+  [playerNickname: string]: {
+    stars: number;
+    comment: string;
+    submitted: boolean;
+  };
+}
+
+interface PlayerProfileData {
+  nickname: string;        // Nome do jogador
+  gameId: string;         // ID no jogo
+  averageRating: number;  // Média das avaliações
+  totalRatings: number;   // Total de avaliações recebidas
+  recentComments: Array<{ // Últimos 5 comentários
+    comment: string;
+    stars: number;
+    fromNickname: string;
+    createdAt: Date;
+  }>;
+}
+
+interface CompletedGroup {
+  id: string;             // ID do grupo encerrado
+  groupName: string;      // Nome do grupo
+  objective: 'Coleta' | 'PvP'; // Objetivo
+  completedAt: Date;      // Data de encerramento
+  members: Array<{        // Membros que participaram
+    nickname: string;
+    gameId: string;
+    role: 'Coleta' | 'Ataque';
+  }>;
+  canRate: boolean;       // Se ainda está no prazo de 30 min
+  currentPlayerNickname: string; // Para evitar autoavaliação
+}
+```
+
+### 2. CONSTANTES
+
+#### src/constants/gameData.ts
+Centraliza dados estáticos do jogo (compartilhados):
+- `SERVERS`: Lista de servidores disponíveis
+- `EQUIPMENT_TIERS`: Tiers de equipamentos (T1-T6)
+- `TOOL_TIERS`: Tiers de ferramentas (T1-T6)
+- `INTEREST_OPTIONS`: Opções de interesse (Coleta, PvP)
+- `SECTORS`: Setores do mapa (A1-I9) gerados dinamicamente
+
+#### src/constants/groupData.ts
+Constantes específicas do sistema de grupos:
+- `GROUP_OBJECTIVES`: Objetivos do grupo (Coleta, PvP)
+- `ROLE_TYPES`: Tipos de função (Coleta, Ataque)
+- `FILTER_INTERESTS`: Interesses para filtros
+- `REQUIRED_TOOLS`: Ferramentas que podem ser exigidas
+- `MIN_LEVEL_OPTIONS`: Opções de level mínimo (1-60)
+- `FILTER_EQUIPMENT_TIERS`: Tiers simplificados para filtros (T1-T6)
+
+### 3. ALGORITMO DE MATCHING
+
+#### src/utils/matching.ts
+Sistema inteligente de matching entre jogadores e anúncios:
+
+**Função principal: `matchPlayersToAd(groupAd, allPlayers)`**
+- Recebe um anúncio de grupo e lista de jogadores
+- Retorna array de jogadores compatíveis
+- Aplica todos os filtros definidos no anúncio
+
+**Regras de compatibilidade implementadas:**
+1. **Level mínimo**: Jogador deve ter level >= ao exigido
+2. **Interesses**: Jogador deve ter pelo menos um interesse em comum
+3. **Equipamentos**: Tiers de armas, armadura e ornicóptero >= ao mínimo
+4. **Base no Deep Desert**: Se exigida, jogador deve possuir
+5. **Setor específico**: Se definido, deve coincidir com o do jogador
+6. **Ferramentas**: Jogador deve possuir as ferramentas exigidas
+
+**Função auxiliar: `generateInvitations(groupAd, compatiblePlayers)`**
+- Gera convites automáticos para jogadores compatíveis
+- Cria estrutura de dados para sistema de notificações
+- Inclui todas as informações necessárias para decisão do jogador
+
+### 4. HOOKS PERSONALIZADOS
+
+#### src/hooks/usePlayerForm.ts
+Hook centralizado que gerencia todo o estado e lógica do formulário de cadastro:
+
+**Estados gerenciados:**
+- `formData`: Dados do formulário de jogador
+- `gameIdLocked`: Controle de edição do gameId
+- `errors`: Mensagens de erro de validação
+
+**Funções expostas:**
+- `handleInputChange(field, value)`: Atualiza campos do formulário
+- `handleInterestToggle(interest)`: Gerencia seleção múltipla de interesses
+- `handleSubmit(e)`: Processa submissão do formulário
+
+#### src/hooks/useGroupAdForm.ts
+Hook centralizado que gerencia todo o estado e lógica do formulário de anúncio:
+
+**Estados gerenciados:**
+- `formData`: Dados do anúncio de grupo
+- `errors`: Mensagens de erro de validação
+
+**Funções expostas:**
+- `handleInputChange(field, value)`: Atualiza campos do formulário
+- `handleRoleChange(roleId, newType)`: Altera tipo de função de um slot
+- `handleFilterInterestToggle(interest)`: Gerencia filtros de interesse
+- `handleFilterToolToggle(tool)`: Gerencia filtros de ferramentas
+- `handleSubmit(e)`: Processa submissão do anúncio
+
+**Validações implementadas:**
+- Nome do grupo obrigatório
+- Objetivo obrigatório
+- Pelo menos uma função definida
+- Validação condicional de setor quando base é exigida
+- Validação de faixa de level (1-60)
+
+### 5. COMPONENTES MODULARES
+
+#### SISTEMA DE CADASTRO DE JOGADOR (src/components/player/)
+
+##### PlayerForm.tsx
+**Componente principal** que orquestra todo o formulário de cadastro
+
+##### BasicInfoSection.tsx
+**Seção de informações básicas:**
+- Nickname, ID do jogo, e-mail, idade
+- Ícones contextuais (User, Mail, Calendar, CheckCircle)
+
+##### GameInfoSection.tsx
+**Seção de informações do jogo:**
+- Servidor e level atual
+- Ícones contextuais (Server, Trophy)
+
+##### EquipmentSection.tsx
+**Seção de equipamentos:**
+- Tiers de armas, armadura e ornicóptero
+- Layout em grid responsivo
+
+##### ToolsSection.tsx
+**Seção de ferramentas de coleta:**
+- Ferramentas de minério e especiaria
+- Layout em grid responsivo
+
+##### InterestsSection.tsx
+**Seção de interesses:**
+- Seleção múltipla: Coleta, PvP
+
+##### DesertBaseSection.tsx
+**Seção de base no Deep Desert:**
+- Checkbox condicional + dropdown de setor
+
+##### FormSubmitButton.tsx
+**Botão de submissão do cadastro**
+
+##### FieldError.tsx
+**Componente de erro reutilizável**
+
+##### PlayerProfile.tsx
+**Tela de perfil público do jogador:**
+- Exibe nickname, ID e avatar personalizado
+- Estatísticas de reputação (média, total de avaliações, % positivas)
+- Lista dos últimos 5 comentários recebidos
+- Renderização de estrelas (inteiras e meias)
+- Estado vazio quando não há avaliações
+- Design responsivo com cards informativos
+
+#### SISTEMA DE ANÚNCIOS DE GRUPO (src/components/group/)
+
+##### GroupAdForm.tsx
+**Componente principal** que orquestra todo o formulário de anúncio:
+- Importa e utiliza o hook useGroupAdForm
+- Renderiza header com título e descrição
+- Organiza as seções em ordem lógica
+- Mantém layout responsivo e tema visual
+
+##### GroupBasicInfoSection.tsx
+**Seção de informações básicas do grupo:**
+- Nome do grupo (obrigatório)
+- Objetivo do grupo (dropdown: Coleta/PvP, obrigatório)
+- Ícones contextuais (Users, Target)
+
+##### GroupRolesSection.tsx
+**Seção de funções no grupo:**
+- 4 slots fixos para membros do grupo
+- Slot 1 sempre é o anunciante (marcado com coroa)
+- Cada slot tem dropdown para função: Coleta/Ataque
+- Função do anunciante pode ser alterada
+- Ícones contextuais (Shield, Crown)
+- Dica explicativa sobre o sistema
+
+##### GroupFiltersSection.tsx
+**Seção de filtros para matching (todos opcionais):**
+- Level mínimo (dropdown 1-60)
+- Interesses do jogador (checkboxes: Coleta/PvP)
+- Equipamentos mínimos (3 dropdowns: armas, armadura, ornicóptero)
+- Base no Deep Desert (checkbox + dropdown condicional de setor)
+- Ferramentas necessárias (checkboxes: minério/especiaria)
+- Ícones contextuais (Filter, Home)
+- Dica sobre matching inteligente
+
+##### GroupSubmitButton.tsx
+**Botão de submissão do anúncio:**
+- Estilizado com gradiente âmbar/laranja
+- Ícone de envio (Send)
+- Efeitos hover e focus
+- Texto "Publicar Anúncio"
+
+##### MyGroup.tsx
+**Tela de gerenciamento do grupo ativo:**
+- Visualização das informações do grupo criado
+- Status dos slots (preenchidos/vazios)
+- Lista de jogadores interessados com ações (selecionar/rejeitar)
+- Lista de jogadores já selecionados
+- Estatísticas do grupo (slots preenchidos, interessados, vagas)
+- Botão para encerrar anúncio com confirmação
+- Interface responsiva com cards organizados
+
+#### SISTEMA DE NOTIFICAÇÕES (src/components/notifications/)
+
+##### NotificationList.tsx
+**Tela principal de notificações:**
+- Lista todos os convites pendentes do jogador
+- Filtragem automática por status (pending)
+- Estado vazio quando não há convites
+- Dicas para melhorar o matching
+- Layout responsivo com cards de convite
+
+##### NotificationCard.tsx
+**Card individual de convite:**
+- Informações completas do grupo (nome, objetivo, criador)
+- Visualização das funções do grupo
+- Data e hora do convite formatadas
+- Botões de ação (aceitar/rejeitar)
+- Feedback visual por tipo de objetivo
+- Ícones contextuais e cores temáticas
+
+#### SISTEMA DE AVALIAÇÕES (src/components/ratings/)
+
+##### RatePlayers.tsx
+**Tela de avaliação pós-grupo:**
+- **Controle de tempo**: Countdown de 30 minutos após encerramento
+- **Prevenção de autoavaliação**: Jogador não pode se avaliar
+- **Interface de avaliação**:
+  - Seletor de estrelas interativo (1-5)
+  - Campo de comentário opcional (máx 200 chars)
+  - Contador de caracteres em tempo real
+- **Estados visuais**:
+  - Cards diferenciados para avaliações enviadas
+  - Feedback de sucesso após envio
+  - Desabilitação após submissão
+- **Validações**:
+  - Estrelas obrigatórias
+  - Limite de caracteres no comentário
+  - Prevenção de envio duplicado
+- **Persistência**: Salva avaliações no localStorage
+- **Expiração**: Tela bloqueada após 30 minutos
+
+### 6. COMPONENTE PRINCIPAL (src/App.tsx)
+Sistema de navegação completo com 6 telas:
+- **Cadastro**: Formulário de perfil do jogador
+- **Criar Anúncio**: Criação de anúncios de grupo
+- **Notificações**: Convites recebidos
+- **Meu Grupo**: Gerenciamento do grupo ativo
+- **Avaliar Jogadores**: Sistema de avaliação pós-grupo
+- **Perfil**: Visualização da reputação pública
+- Navegação por abas com estado preservado
+- Design responsivo e consistente
+- **Comentários internos**: Documentação do fluxo completo
+
+## ARQUITETURA E PADRÕES
+
+### SEPARAÇÃO DE RESPONSABILIDADES
+- **Tipos**: Definições TypeScript centralizadas por funcionalidade
+- **Constantes**: Dados estáticos organizados (compartilhados e específicos)
+- **Hooks**: Lógica de estado e validação separada por funcionalidade
+- **Componentes**: UI modular e reutilizável
+- **Utils**: Algoritmos e funções auxiliares (matching)
+
+### PROPS E TIPAGEM
+Todos os componentes recebem props tipadas:
+- Dados do formulário específicos
+- Funções de callback apropriadas
+- Estados de erro
+- Flags de controle
+
+### REUTILIZAÇÃO
+- `FieldError`: Usado em ambos os sistemas
+- Constantes compartilhadas entre sistemas
+- Padrões de design consistentes
+- Hooks especializados por funcionalidade
+- Algoritmo de matching reutilizável
+- Sistema de renderização de estrelas
+
+### RESPONSIVIDADE
+- Grid adaptativo (1 coluna mobile, 2-3 colunas desktop)
+- Espaçamento consistente com Tailwind
+- Layout mobile-friendly em todos os sistemas
+- Navegação responsiva com wrap automático
+
+## FUNCIONALIDADES IMPLEMENTADAS
+
+### SISTEMA DE CADASTRO DE JOGADOR
+- Validação robusta em tempo real
+- Game ID lock após primeira validação
+- Experiência do usuário otimizada
+- Tema visual Dune consistente
+
+### SISTEMA DE ANÚNCIOS DE GRUPO
+- **Criação de grupos**: Nome + objetivo obrigatórios
+- **Gestão de funções**: 4 slots com tipos Coleta/Ataque
+- **Sistema de filtros avançado**: 
+  - Level mínimo
+  - Interesses específicos
+  - Equipamentos mínimos por tier
+  - Exigência de base no Deep Desert
+  - Ferramentas necessárias
+- **Validação inteligente**: Campos condicionais e validação contextual
+- **Matching preparation**: Estrutura pronta para algoritmo de matching
+
+### SISTEMA DE MATCHING INTELIGENTE
+- **Algoritmo robusto**: Compara jogadores com filtros de anúncios
+- **Múltiplos critérios**: Level, equipamentos, interesses, localização, ferramentas
+- **Geração automática de convites**: Para jogadores compatíveis
+- **Flexibilidade**: Filtros opcionais permitem matching mais amplo
+- **Validação de tiers**: Extração e comparação numérica de equipamentos
+
+### SISTEMA DE NOTIFICAÇÕES
+- **Lista de convites**: Visualização de todos os convites pendentes
+- **Informações completas**: Detalhes do grupo e funções
+- **Ações diretas**: Aceitar/rejeitar convites
+- **Feedback visual**: Status e timestamps formatados
+- **Estado vazio**: Interface amigável quando não há convites
+
+### SISTEMA DE GERENCIAMENTO DE GRUPO
+- **Visão geral**: Status completo do grupo ativo
+- **Gestão de membros**: Seleção e rejeição de interessados
+- **Controle de vagas**: Limite de 4 membros respeitado
+- **Encerramento**: Opção de fechar anúncio com confirmação
+- **Estatísticas**: Métricas visuais do grupo
+
+### SISTEMA DE AVALIAÇÕES ENTRE JOGADORES
+- **Avaliação pós-grupo**: Ativado após encerramento do grupo
+- **Janela de tempo**: 30 minutos para avaliar após encerramento
+- **Prevenção de autoavaliação**: Jogadores não podem se avaliar
+- **Avaliação completa**:
+  - Nota de 1 a 5 estrelas (obrigatória)
+  - Comentário opcional (máximo 200 caracteres)
+- **Interface intuitiva**:
+  - Seletor de estrelas interativo
+  - Contador de caracteres em tempo real
+  - Feedback visual de envio
+- **Persistência local**: Salva no localStorage temporariamente
+- **Estados visuais**: Cards diferenciados para avaliações enviadas
+
+### SISTEMA DE PERFIL E REPUTAÇÃO
+- **Perfil público**: Visualização da reputação do jogador
+- **Estatísticas completas**:
+  - Média de avaliações (com decimais)
+  - Total de avaliações recebidas
+  - Percentual de avaliações positivas (4+ estrelas)
+- **Comentários recentes**: Últimos 5 comentários com detalhes
+- **Renderização de estrelas**: Suporte a estrelas inteiras e meias
+- **Design responsivo**: Cards informativos e layout adaptativo
+
+## REGRAS DE NEGÓCIO IMPLEMENTADAS
+
+### CADASTRO DE JOGADOR
+- ID do jogo único e não editável (previne cadastros duplicados)
+- Equipamentos e ferramentas usam sistema de tiers T1-T6
+- Base no Deep Desert opcional mas setor obrigatório se possui base
+- Interesses múltiplos permitidos mas pelo menos um obrigatório
+- Faixas de idade (13-100) e level (1-60) adequadas ao público
+
+### ANÚNCIOS DE GRUPO
+- Máximo 4 membros por grupo (incluindo anunciante)
+- Anunciante sempre ocupa primeiro slot
+- Funções flexíveis: 100% coleta, 100% ataque ou misto
+- Filtros opcionais para matching personalizado
+- Nome e objetivo obrigatórios para publicação
+- Validação condicional de setor quando base é exigida
+
+### MATCHING E CONVITES
+- Compatibilidade baseada em múltiplos critérios
+- Filtros opcionais aumentam flexibilidade
+- Convites automáticos para jogadores compatíveis
+- Preservação de dados do grupo e jogador no convite
+- Status tracking para convites (pending/accepted/rejected)
+
+### GERENCIAMENTO DE GRUPO
+- Apenas criador pode gerenciar o grupo
+- Seleção manual de membros dentre os interessados
+- Limite rígido de 4 membros total
+- Encerramento requer confirmação
+- Estados claros para cada membro (interessado/selecionado/rejeitado)
+
+### AVALIAÇÕES ENTRE JOGADORES
+- **Elegibilidade**: Apenas membros que participaram do grupo (status "selected")
+- **Janela de tempo**: 30 minutos após encerramento do grupo
+- **Prevenção de autoavaliação**: Jogador não pode se avaliar
+- **Avaliação obrigatória**: Estrelas de 1 a 5 são obrigatórias
+- **Comentário opcional**: Máximo 200 caracteres
+- **Envio único**: Cada jogador pode avaliar outro apenas uma vez por grupo
+- **Persistência**: Avaliações salvas localmente (preparado para BD)
+
+### PERFIL E REPUTAÇÃO
+- **Cálculo de média**: Baseado em todas as avaliações recebidas
+- **Comentários públicos**: Últimos 5 comentários visíveis
+- **Estatísticas transparentes**: Total de avaliações e percentual positivo
+- **Ordenação cronológica**: Comentários mais recentes primeiro
+- **Anonimato opcional**: Sistema preparado para comentários anônimos
+
+## ARQUIVOS DE DEPLOY E DOCUMENTAÇÃO
+
+### README.md
+- Documentação completa do projeto
+- Instruções de instalação e execução
+- Descrição das tecnologias utilizadas
+- Guia de uso das funcionalidades
+- Informações sobre licença e contribuição
+
+### LICENSE
+- Licença MIT para uso livre
+- Permite uso comercial e modificação
+- Mantém créditos do projeto original
+
+### .gitignore
+- Configurado para projetos Vite/Node.js
+- Exclui node_modules, builds e arquivos temporários
+- Inclui exclusão da pasta .bolt/ (específica do Bolt)
+
+### deployment/vercel.json
+- Configuração para deploy no Vercel
+- Roteamento SPA configurado
+- Build command e output directory definidos
+
+### deployment/build-and-deploy.md
+- Guia completo de build e deploy
+- Instruções para Vercel CLI e GitHub integration
+- Troubleshooting de problemas comuns
+- Configurações de performance e monitoramento
+
+## PRÓXIMAS ETAPAS PLANEJADAS
+
+### ✅ CONCLUÍDO (Esteira 2 - Beta)
+1. ✅ Sistema de criação de anúncios
+2. ✅ Algoritmo de matching entre jogadores e anúncios
+3. ✅ Sistema de convites automáticos
+4. ✅ Tela de notificações para jogadores
+5. ✅ Tela de gerenciamento de grupo
+6. ✅ Sistema de avaliações entre jogadores
+7. ✅ Perfil público com reputação
+8. ✅ Documentação completa
+9. ✅ Estrutura para deploy
+
+### 🔄 PRÓXIMAS VERSÕES (Esteira 3 - Produção)
+1. Integração com banco de dados (Supabase)
+2. Sistema de autenticação
+3. Dashboard de anúncios ativos públicos
+4. Sistema de notificações em tempo real
+5. Chat interno do grupo
+6. Histórico de grupos participados
+7. Sistema de denúncias e moderação
+8. Filtros avançados de reputação no matching
+9. Badges e conquistas para jogadores
+10. Analytics e métricas de uso
+
+## BENEFÍCIOS DA MODULARIZAÇÃO
+- **Manutenibilidade**: Cada componente tem responsabilidade única
+- **Testabilidade**: Componentes isolados são mais fáceis de testar
+- **Reutilização**: Componentes podem ser reutilizados em outras partes
+- **Escalabilidade**: Fácil adicionar novas seções ou modificar existentes
+- **Colaboração**: Diferentes desenvolvedores podem trabalhar em componentes separados
+- **Consistência**: Padrões de design e código mantidos entre funcionalidades
+- **Performance**: Carregamento otimizado de componentes específicos
+
+## ESTRUTURA DE ARQUIVOS ATUAL
+```
+src/
+├── components/
+│   ├── player/          # Sistema de cadastro de jogador
+│   │   ├── PlayerForm.tsx
+│   │   ├── BasicInfoSection.tsx
+│   │   ├── GameInfoSection.tsx
+│   │   ├── EquipmentSection.tsx
+│   │   ├── ToolsSection.tsx
+│   │   ├── InterestsSection.tsx
+│   │   ├── DesertBaseSection.tsx
+│   │   ├── FormSubmitButton.tsx
+│   │   ├── FieldError.tsx
+│   │   └── PlayerProfile.tsx
+│   ├── group/           # Sistema de anúncios e gerenciamento
+│   │   ├── GroupAdForm.tsx
+│   │   ├── GroupBasicInfoSection.tsx
+│   │   ├── GroupRolesSection.tsx
+│   │   ├── GroupFiltersSection.tsx
+│   │   ├── GroupSubmitButton.tsx
+│   │   └── MyGroup.tsx
+│   ├── notifications/   # Sistema de notificações
+│   │   ├── NotificationList.tsx
+│   │   └── NotificationCard.tsx
+│   └── ratings/         # Sistema de avaliações
+│       └── RatePlayers.tsx
+├── hooks/
+│   ├── usePlayerForm.ts # Hook do sistema de cadastro
+│   └── useGroupAdForm.ts # Hook do sistema de anúncios
+├── types/
+│   ├── player.ts        # Tipos do sistema de cadastro
+│   ├── group.ts         # Tipos do sistema de anúncios
+│   ├── notification.ts  # Tipos do sistema de notificações
+│   └── ratings.ts       # Tipos do sistema de avaliações
+├── constants/
+│   ├── gameData.ts      # Constantes compartilhadas
+│   └── groupData.ts     # Constantes específicas de grupos
+├── utils/
+│   └── matching.ts      # Algoritmo de matching
+├── App.tsx              # Componente principal com navegação
+└── main.tsx             # Entry point
+
+deployment/              # Arquivos de deploy
+├── vercel.json         # Configuração Vercel
+└── build-and-deploy.md # Guia de deploy
+
+README.md               # Documentação principal
+LICENSE                 # Licença MIT
+.gitignore             # Exclusões Git
+project-documentation.txt # Esta documentação
+```
+
+## DESIGN SYSTEM ESTABELECIDO
+- **Paleta de cores**: Tons âmbar/laranja inspirados em Dune
+- **Gradientes**: Suaves e consistentes entre funcionalidades
+- **Tipografia**: Hierárquica com pesos adequados
+- **Espaçamento**: Sistema baseado em Tailwind (múltiplos de 4px)
+- **Ícones**: Lucide React com contexto semântico
+- **Interações**: Hover states, focus rings, transições suaves
+- **Layout**: Mobile-first, responsivo, grid adaptativo
+- **Estados**: Feedback visual claro para ações e status
+- **Modais**: Confirmações importantes com overlay
+- **Cards**: Estrutura consistente para informações agrupadas
+- **Estrelas**: Sistema unificado para avaliações (inteiras e meias)
+- **Avatars**: Círculos coloridos com iniciais para identificação
+
+## FLUXO COMPLETO DA APLICAÇÃO
+
+### 1. CADASTRO DO JOGADOR
+- Jogador preenche perfil completo
+- Validação em tempo real
+- Game ID trava após primeira submissão
+- Dados ficam disponíveis para matching
+
+### 2. CRIAÇÃO DE ANÚNCIO
+- Jogador define grupo (nome, objetivo, funções)
+- Configura filtros opcionais para matching
+- Sistema valida dados obrigatórios
+- Anúncio fica ativo para matching
+
+### 3. MATCHING AUTOMÁTICO
+- Sistema compara jogadores cadastrados com anúncios ativos
+- Aplica todos os filtros definidos
+- Gera convites para jogadores compatíveis
+- Convites aparecem na tela de notificações
+
+### 4. GESTÃO DE CONVITES
+- Jogadores visualizam convites recebidos
+- Podem aceitar ou rejeitar convites
+- Informações completas do grupo disponíveis
+- Feedback imediato das ações
+
+### 5. FORMAÇÃO DO GRUPO
+- Criador visualiza jogadores interessados
+- Seleciona membros até completar 4 slots
+- Pode rejeitar jogadores não desejados
+- Encerra anúncio quando satisfeito
+
+### 6. FARMING NO DEEP DESERT
+- Grupo formado vai farmar juntos
+- Experiência de jogo colaborativa
+- Criador encerra grupo após sessão
+
+### 7. AVALIAÇÃO ENTRE JOGADORES
+- Sistema ativa tela de avaliação (30 min)
+- Cada membro avalia os outros (exceto a si mesmo)
+- Avaliação: 1-5 estrelas + comentário opcional
+- Dados salvos para construir reputação
+
+### 8. CONSTRUÇÃO DE REPUTAÇÃO
+- Avaliações acumulam no perfil do jogador
+- Média, total e comentários ficam públicos
+- Reputação influencia convites futuros
+- Ciclo se repete com maior confiabilidade
+
+Este fluxo completo simula todo o ecossistema de formação de grupos temporários para farming no Deep Desert, desde o cadastro inicial até a construção de reputação a longo prazo, criando uma comunidade auto-regulada e confiável.
+
+---
+
+**VERSÃO ATUAL**: Beta v1.0 (Janeiro 2025)  
+**STATUS**: Pronto para export e deploy  
+**PRÓXIMO PASSO**: Upload manual no GitHub e deploy no Vercel

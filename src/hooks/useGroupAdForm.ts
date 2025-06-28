@@ -1,0 +1,153 @@
+import { useState } from 'react';
+import { GroupAdData, GroupAdErrors } from '../types/group';
+import { groupService } from '../services/groupService';
+import { useAuth } from '../components/auth/AuthProvider';
+
+const initialFormData: GroupAdData = {
+  groupName: '',
+  objective: '',
+  roles: [
+    { id: '1', type: 'Coleta', isOwner: true, playerName: 'Você (Anunciante)' },
+    { id: '2', type: 'Coleta', isOwner: false },
+    { id: '3', type: 'Coleta', isOwner: false },
+    { id: '4', type: 'Coleta', isOwner: false }
+  ],
+  filters: {
+    minLevel: '',
+    interests: [],
+    minWeaponTier: '',
+    minArmorTier: '',
+    minOrnithopterTier: '',
+    requiresDeepDesertBase: false,
+    specificSector: '',
+    requiredTools: []
+  }
+};
+
+export const useGroupAdForm = () => {
+  const [formData, setFormData] = useState<GroupAdData>(initialFormData);
+  const [errors, setErrors] = useState<GroupAdErrors>({});
+  const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
+
+  const handleInputChange = (field: string, value: any) => {
+    if (field.startsWith('filters.')) {
+      const filterField = field.replace('filters.', '');
+      setFormData(prev => ({
+        ...prev,
+        filters: { ...prev.filters, [filterField]: value }
+      }));
+    } else {
+      setFormData(prev => ({ ...prev, [field]: value }));
+    }
+    
+    // Clear error when user starts typing
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    }
+  };
+
+  const handleRoleChange = (roleId: string, newType: 'Coleta' | 'Ataque') => {
+    setFormData(prev => ({
+      ...prev,
+      roles: prev.roles.map(role => 
+        role.id === roleId ? { ...role, type: newType } : role
+      )
+    }));
+  };
+
+  const handleFilterInterestToggle = (interest: string) => {
+    const newInterests = formData.filters.interests.includes(interest)
+      ? formData.filters.interests.filter(i => i !== interest)
+      : [...formData.filters.interests, interest];
+    
+    handleInputChange('filters.interests', newInterests);
+  };
+
+  const handleFilterToolToggle = (tool: string) => {
+    const newTools = formData.filters.requiredTools.includes(tool)
+      ? formData.filters.requiredTools.filter(t => t !== tool)
+      : [...formData.filters.requiredTools, tool];
+    
+    handleInputChange('filters.requiredTools', newTools);
+  };
+
+  const validateForm = (): boolean => {
+    const newErrors: GroupAdErrors = {};
+
+    if (!formData.groupName.trim()) {
+      newErrors.groupName = 'Nome do grupo é obrigatório';
+    }
+
+    if (!formData.objective) {
+      newErrors.objective = 'Objetivo do grupo é obrigatório';
+    }
+
+    // Check if at least one role is defined (owner is always defined)
+    const definedRoles = formData.roles.filter(role => role.type);
+    if (definedRoles.length === 0) {
+      newErrors.roles = 'Defina pelo menos uma função no grupo';
+    }
+
+    // Validate conditional fields
+    if (formData.filters.requiresDeepDesertBase && !formData.filters.specificSector) {
+      newErrors['filters.specificSector'] = 'Setor específico é obrigatório quando base no Deep Desert é exigida';
+    }
+
+    // Level validation
+    if (formData.filters.minLevel) {
+      const level = parseInt(formData.filters.minLevel);
+      if (isNaN(level) || level < 1 || level > 60) {
+        newErrors['filters.minLevel'] = 'Level deve ser entre 1 e 60';
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateForm()) return;
+    if (!user?.id) {
+      alert('❌ Erro: Usuário não autenticado');
+      return;
+    }
+
+    setLoading(true);
+    
+    try {
+      const { data, error } = await groupService.createGroupAd(formData, user.id);
+      
+      if (error) {
+        console.error('Erro ao criar anúncio:', error);
+        alert('❌ Erro ao publicar anúncio: ' + error.message);
+        return;
+      }
+      
+      console.log('✅ Anúncio criado no Supabase:', data);
+      alert('⚔️ Aliança formada com sucesso! Guerreiros compatíveis receberão convites.');
+      
+      // Reset form
+      setFormData(initialFormData);
+      
+    } catch (error) {
+      console.error('Erro inesperado:', error);
+      alert('❌ Erro inesperado. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return {
+    formData,
+    errors,
+    loading,
+    handleInputChange,
+    handleRoleChange,
+    handleFilterInterestToggle,
+    handleFilterToolToggle,
+    handleSubmit
+  };
+};
