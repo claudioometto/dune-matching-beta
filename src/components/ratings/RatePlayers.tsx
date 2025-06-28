@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Star, Users, Clock, Send, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Star, Users, Clock, Send, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react';
 import { ratingService } from '../../services/ratingService';
 import { groupService } from '../../services/groupService';
 import { useAuth } from '../auth/AuthProvider';
@@ -33,39 +33,48 @@ export const RatePlayers: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
   const { user } = useAuth();
 
   // Carregar grupos encerrados que podem ser avaliados
-  useEffect(() => {
-    const loadCompletedGroups = async () => {
-      if (!user?.id) return;
+  const loadCompletedGroups = async () => {
+    if (!user?.id) return;
 
-      try {
-        console.log('🔄 Carregando grupos encerrados para avaliação...');
-        
-        const { data, error } = await ratingService.getCompletedGroupsForRating(user.id);
-        
-        if (error) {
-          console.error('❌ Erro ao carregar grupos encerrados:', error);
-          return;
-        }
-
-        console.log('✅ Grupos encerrados encontrados:', data?.length || 0);
-        setCompletedGroups(data || []);
-        
-        // Se há apenas um grupo, selecioná-lo automaticamente
-        if (data && data.length === 1) {
-          setSelectedGroup(data[0]);
-          initializeRatings(data[0]);
-        }
-        
-      } catch (error) {
-        console.error('💥 Erro inesperado ao carregar grupos encerrados:', error);
-      } finally {
-        setLoading(false);
+    try {
+      console.log('🔄 Carregando grupos encerrados para avaliação...');
+      setLoading(true);
+      
+      const { data, error } = await ratingService.getCompletedGroupsForRating(user.id);
+      
+      if (error) {
+        console.error('❌ Erro ao carregar grupos encerrados:', error);
+        setDebugInfo({ error, userId: user.id });
+        return;
       }
-    };
 
+      console.log('✅ Grupos encerrados encontrados:', data?.length || 0);
+      setCompletedGroups(data || []);
+      setDebugInfo({ 
+        groupsFound: data?.length || 0, 
+        groups: data,
+        userId: user.id 
+      });
+      
+      // Se há apenas um grupo, selecioná-lo automaticamente
+      if (data && data.length === 1) {
+        setSelectedGroup(data[0]);
+        initializeRatings(data[0]);
+      }
+      
+    } catch (error) {
+      console.error('💥 Erro inesperado ao carregar grupos encerrados:', error);
+      setDebugInfo({ unexpectedError: error, userId: user.id });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     loadCompletedGroups();
   }, [user]);
 
@@ -259,7 +268,31 @@ export const RatePlayers: React.FC = () => {
           <p className="text-orange-100/90 max-w-3xl mx-auto text-lg leading-relaxed tracking-wide drop-shadow-lg">
             Avalie seus companheiros de expedição para construir a reputação da comunidade do Deep Desert.
           </p>
+
+          {/* Botão de refresh */}
+          <div className="mt-6">
+            <button
+              onClick={loadCompletedGroups}
+              disabled={loading}
+              className="inline-flex items-center gap-2 bg-orange-600/80 hover:bg-orange-500/80 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Atualizar Lista
+            </button>
+          </div>
         </div>
+
+        {/* Debug Info (apenas em desenvolvimento) */}
+        {process.env.NODE_ENV === 'development' && debugInfo && (
+          <div className="max-w-4xl mx-auto mb-8">
+            <div className="bg-blue-900/30 rounded-lg p-4 border border-blue-500/30">
+              <h3 className="text-blue-200 font-bold mb-2">🔍 Debug Info (Dev Only)</h3>
+              <pre className="text-xs text-blue-100 overflow-auto max-h-40">
+                {JSON.stringify(debugInfo, null, 2)}
+              </pre>
+            </div>
+          </div>
+        )}
 
         <div className="max-w-4xl mx-auto">
           {completedGroups.length > 0 ? (
@@ -458,12 +491,26 @@ export const RatePlayers: React.FC = () => {
                 <p className="text-orange-100/80 mb-8 text-lg">
                   Você não possui grupos encerrados recentemente que possam ser avaliados.
                 </p>
-                <div className="bg-orange-900/30 p-6 rounded-xl border border-orange-500/30">
+                <div className="bg-orange-900/30 p-6 rounded-xl border border-orange-500/30 mb-6">
                   <p className="text-sm text-orange-200 tracking-wide">
                     ⭐ <strong>Como funciona:</strong> Após participar de uma expedição que seja encerrada, 
                     você terá 30 minutos para avaliar seus companheiros de grupo.
                   </p>
                 </div>
+
+                {/* Informações sobre debug */}
+                {debugInfo && (
+                  <div className="bg-blue-900/30 p-4 rounded-lg border border-blue-500/30 text-left">
+                    <h4 className="text-blue-200 font-bold mb-2">🔍 Informações de Debug:</h4>
+                    <div className="text-sm text-blue-300">
+                      <p>• Usuário ID: {debugInfo.userId}</p>
+                      <p>• Grupos encontrados: {debugInfo.groupsFound || 0}</p>
+                      {debugInfo.error && (
+                        <p className="text-red-300">• Erro: {debugInfo.error.message}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

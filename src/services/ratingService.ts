@@ -111,14 +111,16 @@ export const ratingService = {
   },
 
   /**
-   * Buscar grupos encerrados que podem ser avaliados
+   * Buscar grupos encerrados que podem ser avaliados - VERSÃO CORRIGIDA
    */
   async getCompletedGroupsForRating(userId: string): Promise<{ data: any[] | null; error: any }> {
     try {
       console.log('🔄 Buscando grupos encerrados para avaliação:', userId);
       
-      // Buscar grupos onde o usuário participou e que foram encerrados nas últimas 24 horas
+      // Buscar grupos encerrados nas últimas 24 horas onde o usuário participou
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      
+      console.log('📅 Buscando grupos encerrados desde:', twentyFourHoursAgo);
       
       // 1. Buscar grupos criados pelo usuário que foram encerrados
       const { data: ownedGroups, error: ownedError } = await supabase
@@ -129,36 +131,44 @@ export const ratingService = {
           resource_target,
           status,
           created_at,
-          updated_at
+          updated_at,
+          host_id
         `)
         .eq('host_id', userId)
         .eq('status', 'closed')
-        .gte('updated_at', twentyFourHoursAgo);
+        .gte('created_at', twentyFourHoursAgo);
 
       if (ownedError) {
         console.error('❌ Erro ao buscar grupos próprios encerrados:', ownedError);
+      } else {
+        console.log('📊 Grupos próprios encerrados encontrados:', ownedGroups?.length || 0);
       }
 
       // 2. Buscar grupos onde o usuário foi membro aceito e que foram encerrados
       const { data: memberGroups, error: memberError } = await supabase
         .from('group_matches')
         .select(`
+          id,
+          status,
           group_ads!inner (
             id,
             title,
             resource_target,
             status,
             created_at,
-            updated_at
+            updated_at,
+            host_id
           )
         `)
         .eq('player_id', userId)
         .eq('status', 'accepted')
         .eq('group_ads.status', 'closed')
-        .gte('group_ads.updated_at', twentyFourHoursAgo);
+        .gte('group_ads.created_at', twentyFourHoursAgo);
 
       if (memberError) {
         console.error('❌ Erro ao buscar grupos como membro encerrados:', memberError);
+      } else {
+        console.log('📊 Grupos como membro encerrados encontrados:', memberGroups?.length || 0);
       }
 
       // Combinar resultados
@@ -167,66 +177,94 @@ export const ratingService = {
         ...(memberGroups || []).map(match => match.group_ads)
       ];
 
+      console.log('📊 Total de grupos encontrados:', allGroups.length);
+
       // Remover duplicatas
       const uniqueGroups = allGroups.filter((group, index, self) => 
         index === self.findIndex(g => g.id === group.id)
       );
 
-      console.log('📊 Grupos únicos encontrados:', uniqueGroups.length);
+      console.log('📊 Grupos únicos após remoção de duplicatas:', uniqueGroups.length);
 
       // Para cada grupo, buscar os membros e verificar se ainda pode avaliar
       const completedGroupsWithMembers = await Promise.all(
         uniqueGroups.map(async (group) => {
           try {
-            // Buscar membros do grupo
-            const { data: groupMembers } = await supabase
+            console.log(`🔍 Processando grupo: ${group.title} (${group.id})`);
+            
+            // Buscar todos os membros aceitos do grupo
+            const { data: acceptedMembers, error: membersError } = await supabase
               .from('group_matches')
               .select(`
+                id,
+                player_id,
                 players!inner (
                   id,
-                  nickname
+                  nickname,
+                  name
                 )
               `)
               .eq('group_id', group.id)
               .eq('status', 'accepted');
 
-            // Adicionar o líder do grupo
-            const { data: hostData } = await supabase
+            if (membersError) {
+              console.error(`❌ Erro ao buscar membros do grupo ${group.id}:`, membersError);
+              return null;
+            }
+
+            console.log(`👥 Membros aceitos encontrados para ${group.title}:`, acceptedMembers?.length || 0);
+
+            // Buscar dados do host (líder do grupo)
+            const { data: hostData, error: hostError } = await supabase
               .from('players')
-              .select('id, nickname')
-              .eq('id', userId) // Se o usuário é o host
+              .select('id, nickname, name')
+              .eq('id', group.host_id)
               .single();
 
-            const members = [
-              ...(groupMembers || []).map(match => ({
-                id: match.players.id,
-                nickname: match.players.nickname,
-                user_id: match.players.id
-              }))
-            ];
+            if (hostError) {
+              console.error(`❌ Erro ao buscar dados do host do grupo ${group.id}:`, hostError);
+            }
 
-            // Se o usuário é o host, adicionar ele à lista
-            if (hostData && group.host_id === userId) {
-              members.unshift({
+            // Montar lista de todos os membros (host + aceitos)
+            const allMembers = [];
+            
+            // Adicionar o host
+            if (hostData) {
+              allMembers.push({
                 id: hostData.id,
                 nickname: hostData.nickname,
                 user_id: hostData.id
               });
             }
+            
+            // Adicionar membros aceitos
+            if (acceptedMembers) {
+              acceptedMembers.forEach(member => {
+                allMembers.push({
+                  id: member.players.id,
+                  nickname: member.players.nickname,
+                  user_id: member.players.id
+                });
+              });
+            }
+
+            console.log(`👥 Total de membros para avaliação em ${group.title}:`, allMembers.length);
 
             // Verificar se ainda pode avaliar (30 minutos após encerramento)
-            const updatedAt = new Date(group.updated_at || group.created_at);
+            const completedAt = new Date(group.updated_at || group.created_at);
             const now = new Date();
-            const thirtyMinutesLater = new Date(updatedAt.getTime() + 30 * 60 * 1000);
+            const thirtyMinutesLater = new Date(completedAt.getTime() + 30 * 60 * 1000);
             const canRate = now <= thirtyMinutesLater;
             const timeRemaining = Math.max(0, thirtyMinutesLater.getTime() - now.getTime());
+
+            console.log(`⏰ Grupo ${group.title} - Pode avaliar: ${canRate}, Tempo restante: ${Math.floor(timeRemaining / 1000 / 60)}min`);
 
             return {
               id: group.id,
               title: group.title,
               resource_target: group.resource_target,
               completed_at: group.updated_at || group.created_at,
-              members,
+              members: allMembers,
               canRate,
               timeRemaining
             };
@@ -237,12 +275,18 @@ export const ratingService = {
         })
       );
 
-      // Filtrar grupos nulos e que ainda podem ser avaliados
+      // Filtrar grupos nulos
       const validGroups = completedGroupsWithMembers
-        .filter(group => group !== null && group.canRate)
+        .filter(group => group !== null)
         .sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime());
 
       console.log('✅ Grupos válidos para avaliação:', validGroups.length);
+      
+      // Log detalhado dos grupos encontrados
+      validGroups.forEach((group, index) => {
+        console.log(`${index + 1}. ${group.title} - ${group.members.length} membros - ${group.canRate ? 'Pode avaliar' : 'Expirado'}`);
+      });
+
       return { data: validGroups, error: null };
 
     } catch (error) {
