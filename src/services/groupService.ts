@@ -184,6 +184,7 @@ export const groupService = {
           max_members,
           status,
           created_at,
+          closed_at,
           host_id,
           players!group_ads_host_id_fkey (
             nickname,
@@ -319,6 +320,7 @@ export const groupService = {
             max_members,
             status,
             created_at,
+            closed_at,
             host_id
           )
         `)
@@ -643,6 +645,7 @@ export const groupService = {
             resource_target,
             roles_needed,
             created_at,
+            closed_at,
             players!group_ads_host_id_fkey (
               nickname,
               name
@@ -699,6 +702,49 @@ export const groupService = {
   },
 
   /**
+   * Buscar todos os matches do usuário (para debug)
+   */
+  async getAllUserMatches(userId: string): Promise<{ data: any[] | null; error: any }> {
+    try {
+      console.log('🔄 Buscando todos os matches do usuário:', userId);
+      
+      const { data, error } = await supabase
+        .from('group_matches')
+        .select(`
+          id,
+          status,
+          created_at,
+          group_id,
+          player_id
+        `)
+        .eq('player_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('❌ Erro ao buscar matches do usuário:', error);
+        return { 
+          data: null, 
+          error: { 
+            ...error, 
+            message: formatError(error) 
+          } 
+        };
+      }
+
+      console.log('✅ Matches do usuário encontrados:', data?.length || 0);
+      return { data, error: null };
+    } catch (error) {
+      console.error('💥 Erro inesperado ao buscar matches do usuário:', error);
+      return { 
+        data: null, 
+        error: { 
+          message: formatError(error) 
+        } 
+      };
+    }
+  },
+
+  /**
    * Buscar membros do grupo
    */
   async getGroupMembers(groupId: string): Promise<{ data: any[] | null; error: any }> {
@@ -745,12 +791,13 @@ export const groupService = {
   },
 
   /**
-   * Atualizar status do grupo
+   * Atualizar status do grupo - VERSÃO CORRIGIDA COM CLOSED_AT
    */
   async updateGroupStatus(groupId: string, status: 'open' | 'in_progress' | 'closed'): Promise<{ data: GroupAdRow | null; error: any }> {
     try {
       console.log('🔄 Atualizando status do grupo:', { groupId, status });
       
+      // O trigger do banco automaticamente preencherá closed_at quando status = 'closed'
       const { data, error } = await supabase
         .from('group_ads')
         .update({ status })
@@ -770,9 +817,53 @@ export const groupService = {
       }
 
       console.log('✅ Status do grupo atualizado com sucesso:', data);
+      console.log('📅 Closed_at definido como:', data.closed_at);
       return { data, error: null };
     } catch (error) {
       console.error('💥 Erro inesperado ao atualizar status do grupo:', error);
+      return { 
+        data: null, 
+        error: { 
+          message: formatError(error) 
+        } 
+      };
+    }
+  },
+
+  /**
+   * Buscar informações das tabelas (para debug)
+   */
+  async getTablesInfo(): Promise<{ data: any | null; error: any }> {
+    try {
+      console.log('🔄 Buscando informações das tabelas...');
+      
+      // Verificar estrutura da tabela group_ads
+      const { data: groupAdsColumns, error: groupAdsError } = await supabase
+        .rpc('get_table_columns', { table_name: 'group_ads' })
+        .single();
+
+      if (groupAdsError) {
+        console.log('ℹ️ RPC não disponível, usando query alternativa...');
+        
+        // Query alternativa para verificar se closed_at existe
+        const { data: testData, error: testError } = await supabase
+          .from('group_ads')
+          .select('id, status, created_at, closed_at')
+          .limit(1);
+
+        return { 
+          data: { 
+            hasClosedAtField: !testError,
+            testError: testError?.message,
+            sampleData: testData
+          }, 
+          error: null 
+        };
+      }
+
+      return { data: groupAdsColumns, error: null };
+    } catch (error) {
+      console.error('💥 Erro inesperado ao buscar informações das tabelas:', error);
       return { 
         data: null, 
         error: { 

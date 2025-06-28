@@ -111,19 +111,19 @@ export const ratingService = {
   },
 
   /**
-   * Buscar grupos encerrados que podem ser avaliados - VERSÃO CORRIGIDA PARA FUSO HORÁRIO
+   * Buscar grupos encerrados que podem ser avaliados - VERSÃO CORRIGIDA COM CLOSED_AT
    */
   async getCompletedGroupsForRating(userId: string): Promise<{ data: any[] | null; error: any }> {
     try {
       console.log('🔄 Buscando grupos encerrados para avaliação:', userId);
-      
-      // CORREÇÃO: Usar janela de tempo mais ampla para compensar diferenças de fuso horário
-      // Buscar grupos encerrados nas últimas 48 horas (ao invés de 24h)
-      const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
-      
-      console.log('📅 Buscando grupos encerrados desde:', fortyEightHoursAgo);
       console.log('🕐 Horário local atual:', new Date().toISOString());
-      console.log('🌍 Timezone offset:', new Date().getTimezoneOffset(), 'minutos');
+      console.log('🌍 Timezone:', Intl.DateTimeFormat().resolvedOptions().timeZone);
+      console.log('⏰ Offset:', new Date().getTimezoneOffset(), 'minutos');
+      
+      // Buscar grupos encerrados nas últimas 24 horas usando o campo closed_at
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      
+      console.log('📅 Buscando grupos encerrados desde:', twentyFourHoursAgo);
       
       // 1. Buscar grupos criados pelo usuário que foram encerrados
       const { data: ownedGroups, error: ownedError } = await supabase
@@ -134,19 +134,20 @@ export const ratingService = {
           resource_target,
           status,
           created_at,
-          updated_at,
+          closed_at,
           host_id
         `)
         .eq('host_id', userId)
         .eq('status', 'closed')
-        .gte('created_at', fortyEightHoursAgo);
+        .not('closed_at', 'is', null)
+        .gte('closed_at', twentyFourHoursAgo);
 
       if (ownedError) {
         console.error('❌ Erro ao buscar grupos próprios encerrados:', ownedError);
       } else {
         console.log('📊 Grupos próprios encerrados encontrados:', ownedGroups?.length || 0);
         ownedGroups?.forEach(group => {
-          console.log(`  - ${group.title}: criado em ${group.created_at}, atualizado em ${group.updated_at}`);
+          console.log(`  - ${group.title}: criado em ${group.created_at}, encerrado em ${group.closed_at}`);
         });
       }
 
@@ -162,14 +163,15 @@ export const ratingService = {
             resource_target,
             status,
             created_at,
-            updated_at,
+            closed_at,
             host_id
           )
         `)
         .eq('player_id', userId)
         .eq('status', 'accepted')
         .eq('group_ads.status', 'closed')
-        .gte('group_ads.created_at', fortyEightHoursAgo);
+        .not('group_ads.closed_at', 'is', null)
+        .gte('group_ads.closed_at', twentyFourHoursAgo);
 
       if (memberError) {
         console.error('❌ Erro ao buscar grupos como membro encerrados:', memberError);
@@ -177,7 +179,7 @@ export const ratingService = {
         console.log('📊 Grupos como membro encerrados encontrados:', memberGroups?.length || 0);
         memberGroups?.forEach(match => {
           const group = match.group_ads;
-          console.log(`  - ${group.title}: criado em ${group.created_at}, atualizado em ${group.updated_at}`);
+          console.log(`  - ${group.title}: criado em ${group.created_at}, encerrado em ${group.closed_at}`);
         });
       }
 
@@ -260,27 +262,32 @@ export const ratingService = {
 
             console.log(`👥 Total de membros para avaliação em ${group.title}:`, allMembers.length);
 
-            // CORREÇÃO: Verificação de tempo mais flexível para compensar fuso horário
-            const completedAt = new Date(group.updated_at || group.created_at);
+            // CORREÇÃO: Usar closed_at ao invés de created_at/updated_at
+            if (!group.closed_at) {
+              console.warn(`⚠️ Grupo ${group.title} não tem closed_at definido, pulando...`);
+              return null;
+            }
+
+            const closedAt = new Date(group.closed_at);
             const now = new Date();
             
-            // Usar 2 horas ao invés de 30 minutos para compensar diferenças de fuso horário
-            const twoHoursLater = new Date(completedAt.getTime() + 2 * 60 * 60 * 1000);
-            const canRate = now <= twoHoursLater;
-            const timeRemaining = Math.max(0, twoHoursLater.getTime() - now.getTime());
+            // 30 minutos após o encerramento para avaliar
+            const thirtyMinutesLater = new Date(closedAt.getTime() + 30 * 60 * 1000);
+            const canRate = now <= thirtyMinutesLater;
+            const timeRemaining = Math.max(0, thirtyMinutesLater.getTime() - now.getTime());
 
             console.log(`⏰ Grupo ${group.title}:`);
-            console.log(`   - Encerrado em: ${completedAt.toISOString()}`);
+            console.log(`   - Encerrado em: ${closedAt.toISOString()}`);
             console.log(`   - Agora: ${now.toISOString()}`);
-            console.log(`   - Prazo até: ${twoHoursLater.toISOString()}`);
+            console.log(`   - Prazo até: ${thirtyMinutesLater.toISOString()}`);
             console.log(`   - Pode avaliar: ${canRate}`);
-            console.log(`   - Tempo restante: ${Math.floor(timeRemaining / 1000 / 60)}min`);
+            console.log(`   - Tempo restante: ${Math.floor(timeRemaining / 1000 / 60)}min ${Math.floor((timeRemaining % (1000 * 60)) / 1000)}s`);
 
             return {
               id: group.id,
               title: group.title,
               resource_target: group.resource_target,
-              completed_at: group.updated_at || group.created_at,
+              completed_at: group.closed_at, // Usar closed_at como completed_at
               members: allMembers,
               canRate,
               timeRemaining
