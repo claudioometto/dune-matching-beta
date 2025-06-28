@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Swords, AlertTriangle } from 'lucide-react';
+import { Users, Swords, AlertTriangle, Clock } from 'lucide-react';
 import { useGroupAdForm } from '../../hooks/useGroupAdForm';
 import { GroupBasicInfoSection } from './GroupBasicInfoSection';
 import { GroupRolesSection } from './GroupRolesSection';
@@ -13,6 +13,7 @@ export const GroupAdForm: React.FC = () => {
     loading,
     hasActiveGroup,
     checkingActiveGroup,
+    blockReason,
     handleInputChange,
     handleRoleChange,
     handleFilterInterestToggle,
@@ -53,7 +54,7 @@ export const GroupAdForm: React.FC = () => {
               GRUPO ATIVO DETECTADO
             </h1>
             <p className="text-orange-100/90 max-w-3xl mx-auto text-lg leading-relaxed tracking-wide drop-shadow-lg">
-              Você já possui um grupo ativo no sistema imperial. Finalize-o antes de formar uma nova aliança.
+              Você já possui participação ativa no sistema imperial. Resolva sua situação atual antes de formar uma nova aliança.
             </p>
           </div>
 
@@ -66,14 +67,26 @@ export const GroupAdForm: React.FC = () => {
                   <AlertTriangle className="w-10 h-10 text-white" />
                 </div>
                 <h3 className="text-2xl font-bold text-red-200 mb-4 tracking-wide">
-                  ALIANÇA JÁ FORMADA
+                  PARTICIPAÇÃO ATIVA DETECTADA
                 </h3>
                 <p className="text-red-100/80 mb-8 text-lg">
-                  Você já possui um grupo ativo. Finalize-o antes de criar outro.
+                  {blockReason}
                 </p>
-                <div className="bg-red-900/30 p-6 rounded-xl border border-red-500/30">
+                <div className="bg-red-900/30 p-6 rounded-xl border border-red-500/30 mb-6">
                   <p className="text-sm text-red-200 tracking-wide">
-                    ⚔️ <strong>Instrução:</strong> Vá para a aba "Meu Grupo" para gerenciar sua aliança atual ou encerrá-la.
+                    ⚔️ <strong>Instrução:</strong> Vá para a aba "Meu Grupo" para gerenciar sua situação atual.
+                  </p>
+                </div>
+
+                {/* Informações sobre limite de tempo */}
+                <div className="bg-orange-900/30 p-6 rounded-xl border border-orange-500/30">
+                  <div className="flex items-center justify-center gap-2 mb-3">
+                    <Clock className="w-5 h-5 text-orange-400" />
+                    <h4 className="font-bold text-orange-200">Sistema de Expiração Automática</h4>
+                  </div>
+                  <p className="text-sm text-orange-200 tracking-wide">
+                    🕐 <strong>Lembrete:</strong> Todos os grupos são automaticamente encerrados após 6 horas de criação. 
+                    Grupos lotados (4/4 membros) também não aparecem mais na listagem pública.
                   </p>
                 </div>
               </div>
@@ -145,11 +158,31 @@ export const GroupAdForm: React.FC = () => {
           </div>
         </form>
 
-        {/* Footer épico */}
-        <div className="text-center text-orange-100/80 mt-12">
+        {/* Footer épico com informações importantes */}
+        <div className="text-center text-orange-100/80 mt-12 space-y-4">
           <p className="text-sm tracking-wide drop-shadow-md">
-            ⚔️ Após formar a aliança, guerreiros compatíveis receberão convites baseados nos critérios definidos ⚔️
+            ⚔️ Após formar a aliança, guerreiros poderão se candidatar através da aba "Explorar Grupos" ⚔️
           </p>
+          
+          {/* Informações sobre regras */}
+          <div className="max-w-4xl mx-auto">
+            <div className="bg-orange-900/30 p-6 rounded-xl border border-orange-500/30">
+              <h4 className="font-bold text-orange-200 mb-3 flex items-center justify-center gap-2">
+                <Clock className="w-5 h-5" />
+                Regras do Sistema Imperial
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-orange-200">
+                <div>
+                  <p>🕐 <strong>Expiração:</strong> Grupos são encerrados automaticamente após 6 horas</p>
+                  <p>👥 <strong>Limite:</strong> Máximo 4 membros por expedição</p>
+                </div>
+                <div>
+                  <p>🔒 <strong>Exclusividade:</strong> Apenas 1 grupo ativo por guerreiro</p>
+                  <p>🚫 <strong>Visibilidade:</strong> Grupos lotados não aparecem na listagem</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

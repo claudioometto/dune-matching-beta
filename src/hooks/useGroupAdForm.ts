@@ -30,9 +30,10 @@ export const useGroupAdForm = () => {
   const [loading, setLoading] = useState(false);
   const [hasActiveGroup, setHasActiveGroup] = useState(false);
   const [checkingActiveGroup, setCheckingActiveGroup] = useState(true);
+  const [blockReason, setBlockReason] = useState<string>('');
   const { user } = useAuth();
 
-  // Verificar se o usuário já tem um grupo ativo
+  // Verificar se o usuário já tem um grupo ativo ou faz parte de um
   const checkActiveGroup = async () => {
     if (!user?.id) {
       setCheckingActiveGroup(false);
@@ -40,17 +41,19 @@ export const useGroupAdForm = () => {
     }
 
     try {
-      const { data: userGroups, error } = await groupService.getUserGroups(user.id);
+      console.log('🔍 Verificando se usuário pode criar grupos...');
       
-      if (error) {
-        console.error('Erro ao verificar grupos ativos:', error);
-        setHasActiveGroup(false);
-      } else {
-        const activeGroups = userGroups?.filter(group => group.status === 'open') || [];
-        setHasActiveGroup(activeGroups.length > 0);
+      const { canCreate, reason } = await groupService.canUserCreateGroup(user.id);
+      
+      setHasActiveGroup(!canCreate);
+      if (!canCreate && reason) {
+        setBlockReason(reason);
       }
+      
+      console.log('✅ Verificação concluída:', { canCreate, reason });
+      
     } catch (error) {
-      console.error('Erro ao verificar grupos ativos:', error);
+      console.error('❌ Erro ao verificar grupos ativos:', error);
       setHasActiveGroup(false);
     } finally {
       setCheckingActiveGroup(false);
@@ -141,9 +144,9 @@ export const useGroupAdForm = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Verificar se já tem grupo ativo
+    // Verificar novamente se pode criar grupos
     if (hasActiveGroup) {
-      alert('❌ Você já possui um grupo ativo. Finalize-o antes de criar outro.');
+      alert(`❌ ${blockReason}`);
       return;
     }
     
@@ -159,20 +162,20 @@ export const useGroupAdForm = () => {
       const { data, error } = await groupService.createGroupAd(formData, user.id);
       
       if (error) {
-        console.error('Erro ao criar anúncio:', error);
+        console.error('❌ Erro ao criar anúncio:', error);
         alert('❌ Erro ao publicar anúncio: ' + error.message);
         return;
       }
       
       console.log('✅ Anúncio criado no Supabase:', data);
-      alert('⚔️ Aliança formada com sucesso! Guerreiros compatíveis receberão convites.');
+      alert('⚔️ Aliança formada com sucesso! Guerreiros compatíveis poderão se candidatar.');
       
       // Reset form
       setFormData(initialFormData);
       setHasActiveGroup(true); // Marcar que agora tem grupo ativo
       
     } catch (error) {
-      console.error('Erro inesperado:', error);
+      console.error('💥 Erro inesperado:', error);
       alert('❌ Erro inesperado. Tente novamente.');
     } finally {
       setLoading(false);
@@ -185,6 +188,7 @@ export const useGroupAdForm = () => {
     loading,
     hasActiveGroup,
     checkingActiveGroup,
+    blockReason,
     handleInputChange,
     handleRoleChange,
     handleFilterInterestToggle,

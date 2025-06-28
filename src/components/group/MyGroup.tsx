@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Target, Crown, UserCheck, AlertTriangle, UserX, Clock, Star } from 'lucide-react';
+import { Users, Target, Crown, UserCheck, AlertTriangle, UserX, Clock, Star, LogOut, Shield } from 'lucide-react';
 import { groupService } from '../../services/groupService';
 import { useAuth } from '../auth/AuthProvider';
 
@@ -15,15 +15,24 @@ interface GroupMember {
   };
 }
 
+interface UserGroupInfo {
+  isLeader: boolean;
+  isActiveMember: boolean;
+  groupData: any;
+  membershipId?: string;
+}
+
 export const MyGroup: React.FC = () => {
   const [groups, setGroups] = useState<any[]>([]);
   const [groupMembers, setGroupMembers] = useState<{ [groupId: string]: GroupMember[] }>({});
+  const [userGroupInfo, setUserGroupInfo] = useState<UserGroupInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [showConfirmClose, setShowConfirmClose] = useState<string | null>(null);
+  const [showConfirmLeave, setShowConfirmLeave] = useState<string | null>(null);
   const [processingAction, setProcessingAction] = useState<string | null>(null);
   const { user } = useAuth();
 
-  // Carregar grupos do usuário e seus membros
+  // Carregar grupos do usuário e verificar participação
   useEffect(() => {
     const loadUserGroups = async () => {
       if (!user?.id) return;
@@ -31,35 +40,72 @@ export const MyGroup: React.FC = () => {
       try {
         console.log('🔄 Carregando grupos do usuário:', user.id);
         
-        const { data, error } = await groupService.getUserGroups(user.id);
+        // 1. Buscar grupos criados pelo usuário
+        const { data: ownedGroups, error: ownedError } = await groupService.getUserGroups(user.id);
         
-        if (error) {
-          console.error('❌ Erro ao carregar grupos:', error);
-          return;
+        if (ownedError) {
+          console.error('❌ Erro ao carregar grupos próprios:', ownedError);
         }
 
-        console.log('✅ Grupos encontrados:', data?.length || 0);
-        setGroups(data || []);
+        // 2. Buscar grupos onde o usuário é membro aceito
+        const { data: memberGroups, error: memberError } = await groupService.getGroupsAsMember(user.id);
+        
+        if (memberError) {
+          console.error('❌ Erro ao carregar grupos como membro:', memberError);
+        }
 
-        // Carregar membros para cada grupo ativo
-        if (data && data.length > 0) {
-          const activeGroups = data.filter(group => group.status === 'open');
+        // 3. Processar dados
+        const ownedActiveGroups = (ownedGroups || []).filter(group => group.status === 'open');
+        const memberActiveGroups = (memberGroups || []).filter(match => 
+          match.status === 'accepted' && match.group_ads?.status === 'open'
+        );
+
+        console.log('✅ Grupos próprios ativos:', ownedActiveGroups.length);
+        console.log('✅ Grupos como membro:', memberActiveGroups.length);
+
+        // 4. Determinar status do usuário
+        if (ownedActiveGroups.length > 0) {
+          // Usuário é líder de um grupo
+          setUserGroupInfo({
+            isLeader: true,
+            isActiveMember: false,
+            groupData: ownedActiveGroups[0]
+          });
+          setGroups(ownedActiveGroups);
           
-          for (const group of activeGroups) {
-            console.log('🔄 Carregando membros do grupo:', group.id);
-            
+          // Carregar membros para grupos próprios
+          for (const group of ownedActiveGroups) {
             const { data: members, error: membersError } = await groupService.getGroupMembers(group.id);
-            
-            if (membersError) {
-              console.error('❌ Erro ao carregar membros do grupo:', group.id, membersError);
-            } else {
-              console.log('✅ Membros encontrados para grupo', group.id, ':', members?.length || 0);
+            if (!membersError) {
               setGroupMembers(prev => ({
                 ...prev,
                 [group.id]: members || []
               }));
             }
           }
+        } else if (memberActiveGroups.length > 0) {
+          // Usuário é membro de um grupo
+          const memberGroup = memberActiveGroups[0];
+          setUserGroupInfo({
+            isLeader: false,
+            isActiveMember: true,
+            groupData: memberGroup.group_ads,
+            membershipId: memberGroup.id
+          });
+          setGroups([memberGroup.group_ads]);
+          
+          // Carregar membros do grupo
+          const { data: members, error: membersError } = await groupService.getGroupMembers(memberGroup.group_ads.id);
+          if (!membersError) {
+            setGroupMembers(prev => ({
+              ...prev,
+              [memberGroup.group_ads.id]: members || []
+            }));
+          }
+        } else {
+          // Usuário não tem grupos ativos
+          setUserGroupInfo(null);
+          setGroups([]);
         }
 
       } catch (error) {
@@ -151,20 +197,35 @@ export const MyGroup: React.FC = () => {
         return;
       }
 
-      // Atualizar lista local
-      setGroups(prev => 
-        prev.map(group => 
-          group.id === groupId 
-            ? { ...group, status: 'closed' }
-            : group
-        )
-      );
-      
+      // Atualizar estado local
+      setGroups([]);
+      setUserGroupInfo(null);
       setShowConfirmClose(null);
       alert('✅ Grupo encerrado com sucesso!');
     } catch (error) {
       console.error('💥 Erro inesperado ao encerrar grupo:', error);
       alert('❌ Erro inesperado ao encerrar grupo.');
+    }
+  };
+
+  const handleLeaveGroup = async (membershipId: string) => {
+    try {
+      const { error } = await groupService.leaveGroup(membershipId);
+      
+      if (error) {
+        console.error('❌ Erro ao deixar grupo:', error);
+        alert('❌ Erro ao deixar grupo: ' + error.message);
+        return;
+      }
+
+      // Atualizar estado local
+      setGroups([]);
+      setUserGroupInfo(null);
+      setShowConfirmLeave(null);
+      alert('✅ Você deixou o grupo com sucesso! Uma nova vaga foi liberada.');
+    } catch (error) {
+      console.error('💥 Erro inesperado ao deixar grupo:', error);
+      alert('❌ Erro inesperado ao deixar grupo.');
     }
   };
 
@@ -192,6 +253,20 @@ export const MyGroup: React.FC = () => {
     };
   };
 
+  const getTimeRemaining = (createdAt: string) => {
+    const created = new Date(createdAt);
+    const now = new Date();
+    const sixHoursLater = new Date(created.getTime() + 6 * 60 * 60 * 1000);
+    const remaining = sixHoursLater.getTime() - now.getTime();
+    
+    if (remaining <= 0) return 'Expirado';
+    
+    const hours = Math.floor(remaining / (1000 * 60 * 60));
+    const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+    
+    return `${hours}h ${minutes}m restantes`;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen relative flex items-center justify-center">
@@ -203,8 +278,6 @@ export const MyGroup: React.FC = () => {
       </div>
     );
   }
-
-  const activeGroups = groups.filter(group => group.status === 'open');
 
   return (
     <div className="min-h-screen relative">
@@ -224,18 +297,24 @@ export const MyGroup: React.FC = () => {
             MINHAS ALIANÇAS
           </h1>
           <p className="text-orange-100/90 max-w-3xl mx-auto text-lg leading-relaxed tracking-wide drop-shadow-lg">
-            Gerencie suas expedições ativas e recrute guerreiros para suas missões no Deep Desert.
+            {userGroupInfo?.isLeader 
+              ? 'Gerencie sua expedição ativa e recrute guerreiros para suas missões no Deep Desert.'
+              : userGroupInfo?.isActiveMember
+              ? 'Você faz parte de uma expedição ativa no Deep Desert. Coordene com seu líder.'
+              : 'Você não possui grupos ativos. Crie uma expedição ou candidate-se a uma existente.'
+            }
           </p>
         </div>
 
         <div className="max-w-6xl mx-auto">
-          {activeGroups.length > 0 ? (
+          {userGroupInfo && groups.length > 0 ? (
             <div className="space-y-8">
-              {activeGroups.map(group => {
+              {groups.map(group => {
                 const stats = getGroupStats(group);
                 const members = groupMembers[group.id] || [];
                 const interestedMembers = members.filter(m => m.status === 'invited');
                 const acceptedMembers = members.filter(m => m.status === 'accepted');
+                const timeRemaining = getTimeRemaining(group.created_at);
                 
                 return (
                   <div key={group.id} className="relative">
@@ -245,16 +324,33 @@ export const MyGroup: React.FC = () => {
                       {/* Group Header */}
                       <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-3">
-                          <Crown className="w-6 h-6 text-amber-400" />
+                          {userGroupInfo.isLeader ? (
+                            <Crown className="w-6 h-6 text-amber-400" />
+                          ) : (
+                            <Shield className="w-6 h-6 text-blue-400" />
+                          )}
                           <h2 className="text-2xl font-bold text-orange-200">{group.title}</h2>
+                          {!userGroupInfo.isLeader && (
+                            <span className="px-3 py-1 bg-blue-900/50 text-blue-200 rounded-full text-sm font-medium">
+                              Membro
+                            </span>
+                          )}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Target className="w-5 h-5 text-amber-400" />
-                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                            group.resource_target === 'PvP' ? 'bg-red-900/50 text-red-200' : 'bg-green-900/50 text-green-200'
-                          }`}>
-                            {group.resource_target}
-                          </span>
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-2">
+                            <Target className="w-5 h-5 text-amber-400" />
+                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                              group.resource_target === 'PvP' ? 'bg-red-900/50 text-red-200' : 'bg-green-900/50 text-green-200'
+                            }`}>
+                              {group.resource_target}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-5 h-5 text-orange-400" />
+                            <span className="text-orange-200 text-sm font-medium">
+                              {timeRemaining}
+                            </span>
+                          </div>
                         </div>
                       </div>
 
@@ -300,7 +396,9 @@ export const MyGroup: React.FC = () => {
                               <div className="text-sm text-orange-300 mb-1">Função: {role}</div>
                               <div className="text-sm font-medium">
                                 {isLeaderSlot ? (
-                                  <span className="text-amber-300">Você (Líder)</span>
+                                  <span className="text-amber-300">
+                                    {userGroupInfo.isLeader ? 'Você (Líder)' : 'Líder do Grupo'}
+                                  </span>
                                 ) : assignedMember ? (
                                   <span className="text-green-300">{assignedMember.players.nickname}</span>
                                 ) : (
@@ -312,8 +410,8 @@ export const MyGroup: React.FC = () => {
                         })}
                       </div>
 
-                      {/* Interested Members Section */}
-                      {interestedMembers.length > 0 && (
+                      {/* Interested Members Section - APENAS PARA LÍDERES */}
+                      {userGroupInfo.isLeader && interestedMembers.length > 0 && (
                         <div className="mb-6">
                           <h3 className="text-lg font-bold text-orange-200 mb-4 flex items-center gap-2">
                             <Clock className="w-5 h-5 text-orange-400" />
@@ -402,8 +500,8 @@ export const MyGroup: React.FC = () => {
                         </div>
                       )}
 
-                      {/* No candidates message */}
-                      {interestedMembers.length === 0 && acceptedMembers.length === 0 && (
+                      {/* No candidates message - APENAS PARA LÍDERES */}
+                      {userGroupInfo.isLeader && interestedMembers.length === 0 && acceptedMembers.length === 0 && (
                         <div className="bg-gray-900/30 p-6 rounded-lg border border-gray-500/30 mb-6 text-center">
                           <Clock className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                           <p className="text-gray-300">Nenhum guerreiro se candidatou ainda</p>
@@ -419,13 +517,25 @@ export const MyGroup: React.FC = () => {
                           Criado em: {formatDate(group.created_at)}
                         </div>
                         
-                        <button
-                          onClick={() => setShowConfirmClose(group.id)}
-                          className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center gap-2"
-                        >
-                          <AlertTriangle className="w-5 h-5" />
-                          Encerrar Aliança
-                        </button>
+                        <div className="flex gap-3">
+                          {userGroupInfo.isLeader ? (
+                            <button
+                              onClick={() => setShowConfirmClose(group.id)}
+                              className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center gap-2"
+                            >
+                              <AlertTriangle className="w-5 h-5" />
+                              Encerrar Aliança
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setShowConfirmLeave(userGroupInfo.membershipId!)}
+                              className="bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center gap-2"
+                            >
+                              <LogOut className="w-5 h-5" />
+                              Deixar Grupo
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -444,11 +554,11 @@ export const MyGroup: React.FC = () => {
                   NENHUMA ALIANÇA ATIVA
                 </h3>
                 <p className="text-orange-100/80 mb-8 text-lg">
-                  Você ainda não criou nenhuma expedição. Forme uma aliança para recrutar guerreiros!
+                  Você não faz parte de nenhuma expedição ativa no momento.
                 </p>
                 <div className="bg-orange-900/30 p-6 rounded-xl border border-orange-500/30">
                   <p className="text-sm text-orange-200 tracking-wide">
-                    ⚔️ <strong>Dica:</strong> Vá para a aba "Criar Anúncio" para formar sua primeira aliança no Deep Desert.
+                    ⚔️ <strong>Opções:</strong> Crie uma nova aliança na aba "Criar Anúncio" ou candidate-se a uma existente em "Explorar Grupos".
                   </p>
                 </div>
               </div>
@@ -456,7 +566,7 @@ export const MyGroup: React.FC = () => {
           )}
         </div>
 
-        {/* Confirmation Modal */}
+        {/* Confirmation Modal - Close Group */}
         {showConfirmClose && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
             <div className="relative max-w-md mx-4">
@@ -467,7 +577,7 @@ export const MyGroup: React.FC = () => {
                   <AlertTriangle className="w-12 h-12 text-red-400 mx-auto mb-4" />
                   <h3 className="text-xl font-bold text-red-200 mb-2">Encerrar Aliança</h3>
                   <p className="text-red-300/80">
-                    Tem certeza que deseja encerrar esta expedição? Esta ação não pode ser desfeita.
+                    Tem certeza que deseja encerrar esta expedição? Esta ação não pode ser desfeita e todos os membros serão removidos.
                   </p>
                 </div>
                 
@@ -483,6 +593,40 @@ export const MyGroup: React.FC = () => {
                     className="flex-1 bg-red-600 hover:bg-red-500 text-white py-2 px-4 rounded-lg font-medium transition-colors"
                   >
                     Encerrar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Confirmation Modal - Leave Group */}
+        {showConfirmLeave && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="relative max-w-md mx-4">
+              <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-red-500 rounded-2xl blur-xl opacity-50"></div>
+              
+              <div className="relative bg-gradient-to-br from-gray-900 via-orange-900/20 to-red-900/20 backdrop-blur-md rounded-2xl p-6 shadow-2xl border border-orange-500/30">
+                <div className="text-center mb-6">
+                  <LogOut className="w-12 h-12 text-orange-400 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-orange-200 mb-2">Deixar Grupo</h3>
+                  <p className="text-orange-300/80">
+                    Tem certeza que deseja deixar esta expedição? Uma nova vaga será liberada para outros guerreiros.
+                  </p>
+                </div>
+                
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowConfirmLeave(null)}
+                    className="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-200 py-2 px-4 rounded-lg font-medium transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => handleLeaveGroup(showConfirmLeave)}
+                    className="flex-1 bg-orange-600 hover:bg-orange-500 text-white py-2 px-4 rounded-lg font-medium transition-colors"
+                  >
+                    Deixar Grupo
                   </button>
                 </div>
               </div>

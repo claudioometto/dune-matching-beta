@@ -55,15 +55,82 @@ const convertFormDataToDb = (formData: GroupAdData, hostId: string): GroupAdInse
 };
 
 /**
+ * Verificar se o usuário pode criar grupos (não está em nenhum grupo ativo)
+ */
+const canCreateGroup = async (userId: string): Promise<{ canCreate: boolean; reason?: string }> => {
+  try {
+    // 1. Verificar se é líder de algum grupo ativo
+    const { data: ownedGroups } = await supabase
+      .from('group_ads')
+      .select('id, title')
+      .eq('host_id', userId)
+      .eq('status', 'open');
+
+    if (ownedGroups && ownedGroups.length > 0) {
+      return { 
+        canCreate: false, 
+        reason: `Você já é líder do grupo "${ownedGroups[0].title}". Encerre-o antes de criar outro.` 
+      };
+    }
+
+    // 2. Verificar se é membro aceito de algum grupo ativo
+    const { data: memberGroups } = await supabase
+      .from('group_matches')
+      .select(`
+        id,
+        group_ads!inner (
+          id,
+          title,
+          status
+        )
+      `)
+      .eq('player_id', userId)
+      .eq('status', 'accepted');
+
+    const activeMemberships = memberGroups?.filter(match => 
+      match.group_ads?.status === 'open'
+    );
+
+    if (activeMemberships && activeMemberships.length > 0) {
+      return { 
+        canCreate: false, 
+        reason: `Você já faz parte do grupo "${activeMemberships[0].group_ads?.title}". Deixe o grupo antes de criar outro.` 
+      };
+    }
+
+    return { canCreate: true };
+  } catch (error) {
+    console.error('Erro ao verificar permissão para criar grupo:', error);
+    return { canCreate: false, reason: 'Erro ao verificar permissões' };
+  }
+};
+
+/**
  * Serviço para operações com grupos
  */
 export const groupService = {
+  /**
+   * Verificar se usuário pode criar grupo
+   */
+  async canUserCreateGroup(userId: string): Promise<{ canCreate: boolean; reason?: string }> {
+    return canCreateGroup(userId);
+  },
+
   /**
    * Criar novo anúncio de grupo
    */
   async createGroupAd(formData: GroupAdData, hostId: string): Promise<{ data: GroupAdRow | null; error: any }> {
     try {
       console.log('🔄 Criando anúncio de grupo:', { formData, hostId });
+      
+      // Verificar se o usuário pode criar grupos
+      const { canCreate, reason } = await canCreateGroup(hostId);
+      if (!canCreate) {
+        return { 
+          data: null, 
+          error: { message: reason } 
+        };
+      }
       
       const dbData = convertFormDataToDb(formData, hostId);
       console.log('📊 Dados convertidos para DB:', dbData);
@@ -99,7 +166,7 @@ export const groupService = {
   },
 
   /**
-   * Buscar grupos ativos - VERSÃO MELHORADA
+   * Buscar grupos ativos (não lotados e não expirados)
    */
   async getActiveGroups(): Promise<{ data: any[] | null; error: any }> {
     try {
@@ -146,16 +213,42 @@ export const groupService = {
           .eq('group_id', group.id)
           .eq('status', 'accepted');
 
+        const currentMembers = 1 + (members?.length || 0); // 1 (líder) + membros aceitos
+        
+        // Verificar se o grupo expirou (6 horas)
+        const createdAt = new Date(group.created_at);
+        const now = new Date();
+        const sixHoursLater = new Date(createdAt.getTime() + 6 * 60 * 60 * 1000);
+        const isExpired = now > sixHoursLater;
+        
+        // Se expirou, marcar como fechado
+        if (isExpired) {
+          await supabase
+            .from('group_ads')
+            .update({ status: 'closed' })
+            .eq('id', group.id);
+          
+          return null; // Não incluir na lista
+        }
+        
+        // Se está lotado, não incluir na lista
+        if (currentMembers >= group.max_members) {
+          return null;
+        }
+
         return {
           ...group,
           host_nickname: group.players?.nickname || 'Desconhecido',
           host_name: group.players?.name || 'Desconhecido',
-          current_members: 1 + (members?.length || 0) // 1 (líder) + membros aceitos
+          current_members: currentMembers
         };
       }));
 
-      console.log('✅ Grupos ativos encontrados:', processedData.length);
-      return { data: processedData, error: null };
+      // Filtrar grupos nulos (expirados ou lotados)
+      const filteredData = processedData.filter(group => group !== null);
+
+      console.log('✅ Grupos ativos encontrados:', filteredData.length);
+      return { data: filteredData, error: null };
     } catch (error) {
       console.error('💥 Erro inesperado ao buscar grupos ativos:', error);
       return { 
@@ -195,6 +288,97 @@ export const groupService = {
       return { data, error: null };
     } catch (error) {
       console.error('💥 Erro inesperado ao buscar grupos do usuário:', error);
+      return { 
+        data: null, 
+        error: { 
+          message: formatError(error) 
+        } 
+      };
+    }
+  },
+
+  /**
+   * Buscar grupos onde o usuário é membro aceito
+   */
+  async getGroupsAsMember(userId: string): Promise<{ data: any[] | null; error: any }> {
+    try {
+      console.log('🔄 Buscando grupos como membro:', userId);
+      
+      const { data, error } = await supabase
+        .from('group_matches')
+        .select(`
+          id,
+          status,
+          created_at,
+          group_ads!inner (
+            id,
+            title,
+            description,
+            resource_target,
+            roles_needed,
+            max_members,
+            status,
+            created_at,
+            host_id
+          )
+        `)
+        .eq('player_id', userId)
+        .eq('status', 'accepted')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('❌ Erro ao buscar grupos como membro:', error);
+        return { 
+          data: null, 
+          error: { 
+            ...error, 
+            message: formatError(error) 
+          } 
+        };
+      }
+
+      console.log('✅ Grupos como membro encontrados:', data?.length || 0);
+      return { data, error: null };
+    } catch (error) {
+      console.error('💥 Erro inesperado ao buscar grupos como membro:', error);
+      return { 
+        data: null, 
+        error: { 
+          message: formatError(error) 
+        } 
+      };
+    }
+  },
+
+  /**
+   * Deixar um grupo (para membros)
+   */
+  async leaveGroup(membershipId: string): Promise<{ data: any | null; error: any }> {
+    try {
+      console.log('🔄 Deixando grupo:', membershipId);
+      
+      const { data, error } = await supabase
+        .from('group_matches')
+        .update({ status: 'declined' })
+        .eq('id', membershipId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Erro ao deixar grupo:', error);
+        return { 
+          data: null, 
+          error: { 
+            ...error, 
+            message: formatError(error) 
+          } 
+        };
+      }
+
+      console.log('✅ Grupo deixado com sucesso:', data);
+      return { data, error: null };
+    } catch (error) {
+      console.error('💥 Erro inesperado ao deixar grupo:', error);
       return { 
         data: null, 
         error: { 
@@ -248,10 +432,19 @@ export const groupService = {
     try {
       console.log('🔄 Criando candidatura:', { groupId, playerId });
       
+      // Verificar se o jogador pode se candidatar
+      const { canCreate, reason } = await canCreateGroup(playerId);
+      if (!canCreate) {
+        return { 
+          data: null, 
+          error: { message: reason } 
+        };
+      }
+      
       // Verificar se o grupo ainda está aberto e tem vagas
       const { data: groupData, error: groupError } = await supabase
         .from('group_ads')
-        .select('status, max_members')
+        .select('status, max_members, created_at')
         .eq('id', groupId)
         .single();
 
@@ -270,6 +463,26 @@ export const groupService = {
           data: null, 
           error: { 
             message: 'Este grupo não está mais aceitando candidaturas' 
+          } 
+        };
+      }
+
+      // Verificar se o grupo expirou (6 horas)
+      const createdAt = new Date(groupData.created_at);
+      const now = new Date();
+      const sixHoursLater = new Date(createdAt.getTime() + 6 * 60 * 60 * 1000);
+      
+      if (now > sixHoursLater) {
+        // Marcar grupo como fechado
+        await supabase
+          .from('group_ads')
+          .update({ status: 'closed' })
+          .eq('id', groupId);
+        
+        return { 
+          data: null, 
+          error: { 
+            message: 'Este grupo expirou (6 horas limite)' 
           } 
         };
       }

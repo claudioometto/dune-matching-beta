@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Users, Target, Crown, UserPlus, Filter, RefreshCw, AlertCircle } from 'lucide-react';
+import { Search, Users, Target, Crown, UserPlus, Filter, RefreshCw, AlertCircle, Clock } from 'lucide-react';
 import { groupService } from '../../services/groupService';
 import { playerService } from '../../services/playerService';
 import { useAuth } from '../auth/AuthProvider';
@@ -26,17 +26,27 @@ export const GroupBrowser: React.FC = () => {
   const [objectiveFilter, setObjectiveFilter] = useState<string>('');
   const [availableSlotsFilter, setAvailableSlotsFilter] = useState<string>('');
   const [playerData, setPlayerData] = useState<any>(null);
+  const [userCanApply, setUserCanApply] = useState(true);
+  const [blockReason, setBlockReason] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
 
-  // Carregar dados do jogador atual
+  // Carregar dados do jogador atual e verificar se pode se candidatar
   useEffect(() => {
     const loadPlayerData = async () => {
       if (!user?.id) return;
 
       try {
+        // Carregar dados do jogador
         const { data } = await playerService.getPlayerByUserId(user.id);
         setPlayerData(data);
+
+        // Verificar se pode se candidatar a grupos
+        const { canCreate, reason } = await groupService.canUserCreateGroup(user.id);
+        setUserCanApply(canCreate);
+        if (!canCreate && reason) {
+          setBlockReason(reason);
+        }
       } catch (error) {
         console.error('Erro ao carregar dados do jogador:', error);
       }
@@ -118,6 +128,11 @@ export const GroupBrowser: React.FC = () => {
       return;
     }
 
+    if (!userCanApply) {
+      alert(`❌ ${blockReason}`);
+      return;
+    }
+
     try {
       console.log('📝 Candidatando-se ao grupo:', groupId);
       
@@ -137,6 +152,10 @@ export const GroupBrowser: React.FC = () => {
       console.log('✅ Candidatura enviada com sucesso');
       alert(`✅ Candidatura enviada para "${groupTitle}"! O líder do grupo será notificado.`);
       
+      // Atualizar status do usuário
+      setUserCanApply(false);
+      setBlockReason('Você se candidatou a um grupo e deve aguardar a resposta do líder.');
+      
     } catch (error) {
       console.error('💥 Erro inesperado ao se candidatar:', error);
       alert('❌ Erro inesperado. Tente novamente.');
@@ -154,6 +173,20 @@ export const GroupBrowser: React.FC = () => {
 
   const getAvailableSlots = (group: GroupAd) => {
     return group.max_members - group.current_members;
+  };
+
+  const getTimeRemaining = (createdAt: string) => {
+    const created = new Date(createdAt);
+    const now = new Date();
+    const sixHoursLater = new Date(created.getTime() + 6 * 60 * 60 * 1000);
+    const remaining = sixHoursLater.getTime() - now.getTime();
+    
+    if (remaining <= 0) return 'Expirado';
+    
+    const hours = Math.floor(remaining / (1000 * 60 * 60));
+    const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+    
+    return `${hours}h ${minutes}m`;
   };
 
   if (loading) {
@@ -189,6 +222,21 @@ export const GroupBrowser: React.FC = () => {
             Descubra expedições ativas no Deep Desert e candidate-se para juntar-se aos guerreiros.
           </p>
         </div>
+
+        {/* Status do usuário */}
+        {!userCanApply && (
+          <div className="max-w-6xl mx-auto mb-8">
+            <div className="bg-yellow-900/30 rounded-lg p-6 border border-yellow-500/30">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-6 h-6 text-yellow-400 flex-shrink-0 mt-1" />
+                <div>
+                  <h3 className="text-yellow-200 font-bold mb-2">Candidatura Restrita</h3>
+                  <p className="text-yellow-300">{blockReason}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Filtros */}
         <div className="max-w-6xl mx-auto mb-8">
@@ -267,10 +315,17 @@ export const GroupBrowser: React.FC = () => {
                   </label>
                   <div className={`px-4 py-3 rounded-lg text-sm font-medium ${
                     playerData 
-                      ? 'bg-green-900/30 text-green-200 border border-green-500/30' 
+                      ? userCanApply
+                        ? 'bg-green-900/30 text-green-200 border border-green-500/30'
+                        : 'bg-yellow-900/30 text-yellow-200 border border-yellow-500/30'
                       : 'bg-red-900/30 text-red-200 border border-red-500/30'
                   }`}>
-                    {playerData ? '✅ Cadastrado' : '❌ Não cadastrado'}
+                    {playerData 
+                      ? userCanApply 
+                        ? '✅ Pode se candidatar' 
+                        : '⏳ Aguardando resposta'
+                      : '❌ Não cadastrado'
+                    }
                   </div>
                 </div>
               </div>
@@ -313,6 +368,7 @@ export const GroupBrowser: React.FC = () => {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {filteredGroups.map(group => {
                   const availableSlots = getAvailableSlots(group);
+                  const timeRemaining = getTimeRemaining(group.created_at);
                   
                   return (
                     <div key={group.id} className="relative">
@@ -329,15 +385,23 @@ export const GroupBrowser: React.FC = () => {
                             </div>
                           </div>
                           
-                          <div className="flex items-center gap-2">
-                            <Target className="w-4 h-4 text-amber-400" />
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              group.resource_target === 'PvP' 
-                                ? 'bg-red-900/50 text-red-200' 
-                                : 'bg-green-900/50 text-green-200'
-                            }`}>
-                              {group.resource_target === 'PvP' ? 'PvP' : 'Coleta'}
-                            </span>
+                          <div className="flex flex-col items-end gap-2">
+                            <div className="flex items-center gap-2">
+                              <Target className="w-4 h-4 text-amber-400" />
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                group.resource_target === 'PvP' 
+                                  ? 'bg-red-900/50 text-red-200' 
+                                  : 'bg-green-900/50 text-green-200'
+                              }`}>
+                                {group.resource_target === 'PvP' ? 'PvP' : 'Coleta'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Clock className="w-4 h-4 text-orange-400" />
+                              <span className="text-orange-300 text-xs font-medium">
+                                {timeRemaining}
+                              </span>
+                            </div>
                           </div>
                         </div>
 
@@ -384,10 +448,12 @@ export const GroupBrowser: React.FC = () => {
                           
                           <button
                             onClick={() => handleApplyToGroup(group.id, group.title)}
-                            disabled={!playerData || availableSlots === 0}
+                            disabled={!playerData || !userCanApply || availableSlots === 0}
                             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
                               !playerData 
                                 ? 'bg-gray-600 text-gray-300 cursor-not-allowed'
+                                : !userCanApply
+                                ? 'bg-yellow-600/50 text-yellow-300 cursor-not-allowed'
                                 : availableSlots === 0
                                 ? 'bg-red-600/50 text-red-300 cursor-not-allowed'
                                 : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white'
@@ -396,6 +462,8 @@ export const GroupBrowser: React.FC = () => {
                             <UserPlus className="w-4 h-4" />
                             {!playerData 
                               ? 'Complete o cadastro'
+                              : !userCanApply
+                              ? 'Já candidatado'
                               : availableSlots === 0
                               ? 'Grupo lotado'
                               : 'Candidatar-se'
@@ -425,13 +493,31 @@ export const GroupBrowser: React.FC = () => {
                     : 'Nenhum grupo corresponde aos filtros aplicados. Tente ajustar os critérios de busca.'
                   }
                 </p>
-                <div className="bg-orange-900/30 p-6 rounded-xl border border-orange-500/30">
+                <div className="bg-orange-900/30 p-6 rounded-xl border border-orange-500/30 mb-6">
                   <p className="text-sm text-orange-200 tracking-wide">
                     🏜️ <strong>Dica:</strong> {groups.length === 0 
                       ? 'Vá para "Criar Anúncio" para formar sua própria aliança no Deep Desert.'
                       : 'Remova alguns filtros ou tente termos de busca diferentes.'
                     }
                   </p>
+                </div>
+
+                {/* Informações sobre o sistema */}
+                <div className="bg-blue-900/30 p-6 rounded-xl border border-blue-500/30">
+                  <h4 className="font-bold text-blue-200 mb-3 flex items-center justify-center gap-2">
+                    <Clock className="w-5 h-5" />
+                    Sistema de Expedições
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-blue-200">
+                    <div>
+                      <p>🕐 Grupos expiram em 6 horas</p>
+                      <p>🚫 Grupos lotados não aparecem</p>
+                    </div>
+                    <div>
+                      <p>👥 Máximo 4 membros por grupo</p>
+                      <p>🔄 Lista atualizada automaticamente</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
