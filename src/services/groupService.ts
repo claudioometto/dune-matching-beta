@@ -30,6 +30,11 @@ const formatError = (error: any): string => {
     return 'Dados não encontrados.';
   }
   
+  // Erros de duplicação (candidatura já enviada)
+  if (message.includes('duplicate key')) {
+    return 'Você já se candidatou a este grupo.';
+  }
+  
   // Retornar mensagem original se não conseguir categorizar
   return message;
 };
@@ -94,15 +99,31 @@ export const groupService = {
   },
 
   /**
-   * Buscar grupos ativos
+   * Buscar grupos ativos - VERSÃO MELHORADA
    */
   async getActiveGroups(): Promise<{ data: any[] | null; error: any }> {
     try {
       console.log('🔄 Buscando grupos ativos...');
       
+      // Query mais robusta com joins explícitos
       const { data, error } = await supabase
-        .from('active_groups')
-        .select('*')
+        .from('group_ads')
+        .select(`
+          id,
+          title,
+          description,
+          resource_target,
+          roles_needed,
+          max_members,
+          status,
+          created_at,
+          host_id,
+          players!group_ads_host_id_fkey (
+            nickname,
+            name
+          )
+        `)
+        .eq('status', 'open')
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -116,8 +137,25 @@ export const groupService = {
         };
       }
 
-      console.log('✅ Grupos ativos encontrados:', data?.length || 0);
-      return { data, error: null };
+      // Processar dados para incluir informações do host e contagem de membros
+      const processedData = await Promise.all((data || []).map(async (group) => {
+        // Contar membros aceitos
+        const { data: members } = await supabase
+          .from('group_matches')
+          .select('id')
+          .eq('group_id', group.id)
+          .eq('status', 'accepted');
+
+        return {
+          ...group,
+          host_nickname: group.players?.nickname || 'Desconhecido',
+          host_name: group.players?.name || 'Desconhecido',
+          current_members: 1 + (members?.length || 0) // 1 (líder) + membros aceitos
+        };
+      }));
+
+      console.log('✅ Grupos ativos encontrados:', processedData.length);
+      return { data: processedData, error: null };
     } catch (error) {
       console.error('💥 Erro inesperado ao buscar grupos ativos:', error);
       return { 
@@ -204,12 +242,57 @@ export const groupService = {
   },
 
   /**
-   * Criar convite para jogador
+   * Criar convite/candidatura para jogador - VERSÃO MELHORADA
    */
   async createInvitation(groupId: string, playerId: string): Promise<{ data: GroupMatchRow | null; error: any }> {
     try {
-      console.log('🔄 Criando convite:', { groupId, playerId });
+      console.log('🔄 Criando candidatura:', { groupId, playerId });
       
+      // Verificar se o grupo ainda está aberto e tem vagas
+      const { data: groupData, error: groupError } = await supabase
+        .from('group_ads')
+        .select('status, max_members')
+        .eq('id', groupId)
+        .single();
+
+      if (groupError) {
+        console.error('❌ Erro ao verificar grupo:', groupError);
+        return { 
+          data: null, 
+          error: { 
+            message: 'Grupo não encontrado ou inacessível' 
+          } 
+        };
+      }
+
+      if (groupData.status !== 'open') {
+        return { 
+          data: null, 
+          error: { 
+            message: 'Este grupo não está mais aceitando candidaturas' 
+          } 
+        };
+      }
+
+      // Contar membros atuais
+      const { data: currentMembers } = await supabase
+        .from('group_matches')
+        .select('id')
+        .eq('group_id', groupId)
+        .in('status', ['invited', 'accepted']);
+
+      const totalMembers = 1 + (currentMembers?.length || 0); // 1 (líder) + membros
+
+      if (totalMembers >= groupData.max_members) {
+        return { 
+          data: null, 
+          error: { 
+            message: 'Este grupo já está lotado' 
+          } 
+        };
+      }
+
+      // Criar candidatura
       const inviteData: GroupMatchInsert = {
         group_id: groupId,
         player_id: playerId,
@@ -223,7 +306,7 @@ export const groupService = {
         .single();
 
       if (error) {
-        console.error('❌ Erro ao criar convite:', error);
+        console.error('❌ Erro ao criar candidatura:', error);
         return { 
           data: null, 
           error: { 
@@ -233,10 +316,10 @@ export const groupService = {
         };
       }
 
-      console.log('✅ Convite criado com sucesso:', data);
+      console.log('✅ Candidatura criada com sucesso:', data);
       return { data, error: null };
     } catch (error) {
-      console.error('💥 Erro inesperado ao criar convite:', error);
+      console.error('💥 Erro inesperado ao criar candidatura:', error);
       return { 
         data: null, 
         error: { 

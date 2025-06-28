@@ -7,12 +7,13 @@ import { NotificationList } from './components/notifications/NotificationList';
 import { MyGroup } from './components/group/MyGroup';
 import { RatePlayers } from './components/ratings/RatePlayers';
 import { PlayerProfile } from './components/player/PlayerProfile';
+import { GroupBrowser } from './components/group/GroupBrowser';
 import { EnvironmentBadge } from './components/common/EnvironmentBadge';
 import { ContactButton } from './components/common/ContactButton';
 import { DiagnosticPanel } from './components/common/DiagnosticPanel';
 import { LogOut } from 'lucide-react';
 
-type ViewType = 'player' | 'group' | 'notifications' | 'mygroup' | 'rate' | 'profile';
+type ViewType = 'player' | 'group' | 'browse' | 'notifications' | 'mygroup' | 'rate' | 'profile';
 
 /**
  * DUNE: AWAKENING PLAYER MATCHING - VERSÃO BETA
@@ -23,19 +24,20 @@ type ViewType = 'player' | 'group' | 'notifications' | 'mygroup' | 'rate' | 'pro
  * 1. LOGIN/CADASTRO: Autenticação segura com Supabase Auth
  * 2. CADASTRO (aba "Cadastro"): Jogador preenche perfil completo
  * 3. CRIAR ANÚNCIO (aba "Criar Anúncio"): Define grupo, funções e filtros
- * 4. MATCHING AUTOMÁTICO: Sistema encontra jogadores compatíveis
- * 5. NOTIFICAÇÕES (aba "Notificações"): Jogadores recebem convites
- * 6. MEU GRUPO (aba "Meu Grupo"): Criador gerencia interessados
- * 7. FARMING: Grupo vai farmar no Deep Desert
- * 8. AVALIAR (aba "Avaliar Jogadores"): Membros se avaliam (30 min)
- * 9. PERFIL (aba "Perfil"): Reputação pública do jogador
+ * 4. NAVEGAR GRUPOS (aba "Explorar Grupos"): Lista grupos abertos para candidatura
+ * 5. MATCHING AUTOMÁTICO: Sistema encontra jogadores compatíveis
+ * 6. NOTIFICAÇÕES (aba "Notificações"): Jogadores recebem convites
+ * 7. MEU GRUPO (aba "Meu Grupo"): Criador gerencia interessados
+ * 8. FARMING: Grupo vai farmar no Deep Desert
+ * 9. AVALIAR (aba "Avaliar Jogadores"): Membros se avaliam (30 min)
+ * 10. PERFIL (aba "Perfil"): Reputação pública do jogador
  * 
  * TECNOLOGIAS:
  * - React + TypeScript + Vite
  * - Tailwind CSS + Lucide Icons
  * - Supabase (Auth + Database)
  * 
- * VERSÃO: Beta v2.0 (Janeiro 2025) - Com Autenticação
+ * VERSÃO: Beta v2.1 (Janeiro 2025) - Com Navegação de Grupos
  */
 
 const AppContent: React.FC = () => {
@@ -60,6 +62,8 @@ const AppContent: React.FC = () => {
           return <PlayerForm />; // Cadastro completo do jogador
         case 'group':
           return <GroupAdForm />; // Criação de anúncios de grupo
+        case 'browse':
+          return <GroupBrowser />; // NOVA: Navegação de grupos abertos
         case 'notifications':
           return <NotificationList />; // Convites recebidos
         case 'mygroup':
@@ -87,6 +91,7 @@ const AppContent: React.FC = () => {
   const navigationItems = [
     { id: 'player', label: 'Cadastro', icon: '👤' },
     { id: 'group', label: 'Criar Anúncio', icon: '⚔️' },
+    { id: 'browse', label: 'Explorar Grupos', icon: '🔍' },
     { id: 'notifications', label: 'Notificações', icon: '📡' },
     { id: 'mygroup', label: 'Meu Grupo', icon: '🏛️' },
     { id: 'rate', label: 'Avaliar', icon: '⭐' },

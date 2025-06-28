@@ -22,6 +22,8 @@ export const DiagnosticPanel: React.FC = () => {
     setLoading(true);
     const results: DiagnosticResult[] = [];
 
+    console.log('🔍 Iniciando diagnósticos do sistema...');
+
     // 1. Verificar configuração do Supabase
     try {
       const supabaseConfigured = isSupabaseConfigured();
@@ -31,7 +33,9 @@ export const DiagnosticPanel: React.FC = () => {
         message: supabaseConfigured ? 'Supabase configurado corretamente' : 'Supabase não configurado',
         details: {
           url: !!import.meta.env.VITE_SUPABASE_URL,
-          key: !!import.meta.env.VITE_SUPABASE_ANON_KEY
+          key: !!import.meta.env.VITE_SUPABASE_ANON_KEY,
+          urlValue: import.meta.env.VITE_SUPABASE_URL ? 'Configurada' : 'Não configurada',
+          keyValue: import.meta.env.VITE_SUPABASE_ANON_KEY ? 'Configurada' : 'Não configurada'
         }
       });
     } catch (error) {
@@ -52,7 +56,8 @@ export const DiagnosticPanel: React.FC = () => {
         details: {
           userId: user?.id,
           email: user?.email,
-          authenticated: !!user
+          authenticated: !!user,
+          userObject: user
         }
       });
     } catch (error) {
@@ -105,12 +110,13 @@ export const DiagnosticPanel: React.FC = () => {
     // 5. Testar busca de convites
     if (user?.id) {
       try {
+        console.log('🔍 Testando busca de convites para usuário:', user.id);
         const { data: invitations, error } = await groupService.getPlayerInvitations(user.id);
         results.push({
           name: 'Sistema de Convites',
           status: error ? 'error' : 'success',
           message: error ? `Erro ao buscar convites: ${error.message}` : `${invitations?.length || 0} convites encontrados`,
-          details: { invitations, error }
+          details: { invitations, error, userId: user.id }
         });
       } catch (error) {
         results.push({
@@ -142,6 +148,7 @@ export const DiagnosticPanel: React.FC = () => {
       }
     }
 
+    console.log('🔍 Diagnósticos concluídos:', results);
     setDiagnostics(results);
     setLoading(false);
   };
@@ -174,21 +181,21 @@ export const DiagnosticPanel: React.FC = () => {
     }
   };
 
-  // Só mostrar em desenvolvimento ou quando há problemas
-  const shouldShow = process.env.NODE_ENV === 'development' || 
-                    diagnostics.some(d => d.status === 'error');
-
-  if (!shouldShow) return null;
-
   return (
     <>
-      {/* Botão de diagnóstico */}
+      {/* Botão de diagnóstico - SEMPRE VISÍVEL */}
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 left-6 z-40 bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-full shadow-lg transition-colors"
+        className="fixed bottom-6 left-6 z-40 group relative overflow-hidden"
         title="Diagnóstico do Sistema"
       >
-        <Settings className="w-5 h-5" />
+        {/* Efeito de brilho */}
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full blur-lg opacity-60 group-hover:opacity-90 transition-opacity duration-500 animate-pulse"></div>
+        
+        {/* Botão principal */}
+        <div className="relative bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white p-3 rounded-full shadow-2xl transition-all duration-300 transform group-hover:scale-110 border-2 border-blue-400/50">
+          <Settings className="w-5 h-5" />
+        </div>
       </button>
 
       {/* Modal de diagnóstico */}
@@ -203,7 +210,7 @@ export const DiagnosticPanel: React.FC = () => {
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                   <Settings className="w-6 h-6 text-blue-400" />
-                  <h3 className="text-xl font-bold text-blue-200">Diagnóstico do Sistema</h3>
+                  <h3 className="text-xl font-bold text-blue-200">🔍 Diagnóstico do Sistema Imperial</h3>
                 </div>
                 
                 <div className="flex gap-2">
@@ -229,7 +236,7 @@ export const DiagnosticPanel: React.FC = () => {
               {loading && (
                 <div className="text-center py-8">
                   <div className="w-8 h-8 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin mx-auto mb-4"></div>
-                  <p className="text-blue-200">Executando diagnósticos...</p>
+                  <p className="text-blue-200">Executando diagnósticos do Deep Desert...</p>
                 </div>
               )}
 
@@ -247,9 +254,9 @@ export const DiagnosticPanel: React.FC = () => {
                           {diagnostic.details && (
                             <details className="text-xs">
                               <summary className="cursor-pointer text-gray-400 hover:text-gray-300">
-                                Ver detalhes
+                                Ver detalhes técnicos
                               </summary>
-                              <pre className="mt-2 p-2 bg-black/30 rounded text-gray-300 overflow-auto">
+                              <pre className="mt-2 p-2 bg-black/30 rounded text-gray-300 overflow-auto max-h-40">
                                 {JSON.stringify(diagnostic.details, null, 2)}
                               </pre>
                             </details>
@@ -264,10 +271,10 @@ export const DiagnosticPanel: React.FC = () => {
               {/* Summary */}
               {!loading && diagnostics.length > 0 && (
                 <div className="mt-6 p-4 bg-gray-800/50 rounded-lg">
-                  <h4 className="font-medium text-white mb-2">Resumo</h4>
+                  <h4 className="font-medium text-white mb-2">📊 Resumo do Diagnóstico</h4>
                   <div className="flex gap-4 text-sm">
                     <span className="text-green-400">
-                      ✅ {diagnostics.filter(d => d.status === 'success').length} OK
+                      ✅ {diagnostics.filter(d => d.status === 'success').length} Funcionando
                     </span>
                     <span className="text-yellow-400">
                       ⚠️ {diagnostics.filter(d => d.status === 'warning').length} Avisos
@@ -276,8 +283,36 @@ export const DiagnosticPanel: React.FC = () => {
                       ❌ {diagnostics.filter(d => d.status === 'error').length} Erros
                     </span>
                   </div>
+                  
+                  {diagnostics.some(d => d.status === 'error') && (
+                    <div className="mt-3 p-3 bg-red-900/30 rounded border border-red-500/30">
+                      <p className="text-red-200 text-sm">
+                        🚨 <strong>Problemas detectados!</strong> Verifique os erros acima e corrija as configurações necessárias.
+                      </p>
+                    </div>
+                  )}
+                  
+                  {diagnostics.every(d => d.status === 'success') && (
+                    <div className="mt-3 p-3 bg-green-900/30 rounded border border-green-500/30">
+                      <p className="text-green-200 text-sm">
+                        🎉 <strong>Sistema funcionando perfeitamente!</strong> Todos os componentes estão operacionais.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
+
+              {/* Instructions */}
+              <div className="mt-6 p-4 bg-blue-900/30 rounded-lg border border-blue-500/30">
+                <h4 className="font-medium text-blue-200 mb-2">💡 Como usar este diagnóstico:</h4>
+                <ul className="text-sm text-blue-300 space-y-1">
+                  <li>• <strong>Verde (✅):</strong> Componente funcionando corretamente</li>
+                  <li>• <strong>Amarelo (⚠️):</strong> Aviso - pode funcionar mas precisa atenção</li>
+                  <li>• <strong>Vermelho (❌):</strong> Erro - componente não está funcionando</li>
+                  <li>• Clique em "Ver detalhes técnicos" para informações específicas</li>
+                  <li>• Use "Atualizar" para executar os testes novamente</li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
