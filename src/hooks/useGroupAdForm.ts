@@ -28,7 +28,26 @@ export const useGroupAdForm = () => {
   const [formData, setFormData] = useState<GroupAdData>(initialFormData);
   const [errors, setErrors] = useState<GroupAdErrors>({});
   const [loading, setLoading] = useState(false);
+  const [hasActiveGroup, setHasActiveGroup] = useState(false);
   const { user } = useAuth();
+
+  // Verificar se o usuário já tem um grupo ativo
+  const checkActiveGroup = async () => {
+    if (!user?.id) return;
+
+    try {
+      const { data: userGroups } = await groupService.getUserGroups(user.id);
+      const activeGroups = userGroups?.filter(group => group.status === 'open') || [];
+      setHasActiveGroup(activeGroups.length > 0);
+    } catch (error) {
+      console.error('Erro ao verificar grupos ativos:', error);
+    }
+  };
+
+  // Verificar grupos ativos quando o componente carrega
+  React.useEffect(() => {
+    checkActiveGroup();
+  }, [user]);
 
   const handleInputChange = (field: string, value: any) => {
     if (field.startsWith('filters.')) {
@@ -94,11 +113,11 @@ export const useGroupAdForm = () => {
       newErrors['filters.specificSector'] = 'Setor específico é obrigatório quando base no Deep Desert é exigida';
     }
 
-    // Level validation
+    // Level validation - Ajustado para 1-200
     if (formData.filters.minLevel) {
       const level = parseInt(formData.filters.minLevel);
-      if (isNaN(level) || level < 1 || level > 60) {
-        newErrors['filters.minLevel'] = 'Level deve ser entre 1 e 60';
+      if (isNaN(level) || level < 1 || level > 200) {
+        newErrors['filters.minLevel'] = 'Level deve ser entre 1 e 200';
       }
     }
 
@@ -108,6 +127,12 @@ export const useGroupAdForm = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Verificar se já tem grupo ativo
+    if (hasActiveGroup) {
+      alert('❌ Você já possui um grupo ativo. Finalize-o antes de criar outro.');
+      return;
+    }
     
     if (!validateForm()) return;
     if (!user?.id) {
@@ -131,6 +156,7 @@ export const useGroupAdForm = () => {
       
       // Reset form
       setFormData(initialFormData);
+      setHasActiveGroup(true); // Marcar que agora tem grupo ativo
       
     } catch (error) {
       console.error('Erro inesperado:', error);
@@ -144,10 +170,12 @@ export const useGroupAdForm = () => {
     formData,
     errors,
     loading,
+    hasActiveGroup,
     handleInputChange,
     handleRoleChange,
     handleFilterInterestToggle,
     handleFilterToolToggle,
-    handleSubmit
+    handleSubmit,
+    checkActiveGroup
   };
 };

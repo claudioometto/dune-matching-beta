@@ -13,10 +13,13 @@ export const PlayerForm: React.FC = () => {
   const {
     formData,
     gameIdLocked,
+    isRegistered,
+    isEditMode,
     errors,
     loading,
     handleInputChange,
     handleInterestToggle,
+    toggleEditMode,
     handleSubmit
   } = usePlayerForm();
 
@@ -39,12 +42,24 @@ export const PlayerForm: React.FC = () => {
           </div>
           
           <h1 className="text-5xl md:text-6xl font-bold bg-gradient-to-r from-orange-200 via-amber-300 to-yellow-400 bg-clip-text text-transparent mb-4 tracking-wider drop-shadow-2xl">
-            REGISTRO DE GUERREIRO
+            {isRegistered ? 'PERFIL DO GUERREIRO' : 'REGISTRO DE GUERREIRO'}
           </h1>
           <p className="text-orange-100/90 max-w-3xl mx-auto text-lg leading-relaxed tracking-wide drop-shadow-lg">
-            Junte-se à elite dos sobreviventes do Deep Desert. Complete seu perfil para encontrar 
-            aliados dignos nas areias traiçoeiras de Arrakis.
+            {isRegistered 
+              ? 'Gerencie suas informações de guerreiro do Deep Desert. Use o modo de edição para atualizar seus dados.'
+              : 'Junte-se à elite dos sobreviventes do Deep Desert. Complete seu perfil para encontrar aliados dignos nas areias traiçoeiras de Arrakis.'
+            }
           </p>
+
+          {/* Status do cadastro */}
+          {isRegistered && (
+            <div className="mt-6 inline-flex items-center gap-2 bg-green-900/30 px-6 py-3 rounded-full border border-green-500/50">
+              <Shield className="w-5 h-5 text-green-400" />
+              <span className="text-green-200 font-medium tracking-wide">
+                {isEditMode ? 'MODO DE EDIÇÃO ATIVO' : 'GUERREIRO REGISTRADO NO SISTEMA'}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Form container épico */}
@@ -59,6 +74,7 @@ export const PlayerForm: React.FC = () => {
               <BasicInfoSection
                 formData={formData}
                 gameIdLocked={gameIdLocked}
+                isEditMode={isEditMode}
                 errors={errors}
                 onInputChange={handleInputChange}
               />
@@ -93,7 +109,12 @@ export const PlayerForm: React.FC = () => {
                 onInputChange={handleInputChange}
               />
 
-              <FormSubmitButton loading={loading} />
+              <FormSubmitButton 
+                loading={loading} 
+                isRegistered={isRegistered}
+                isEditMode={isEditMode}
+                onToggleEdit={toggleEditMode}
+              />
             </div>
           </div>
         </form>

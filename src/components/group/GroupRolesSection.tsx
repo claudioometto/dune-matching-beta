@@ -29,7 +29,7 @@ export const GroupRolesSection: React.FC<GroupRolesSectionProps> = ({
               <span className="font-medium text-gray-700 flex items-center gap-2">
                 {role.isOwner && <Crown className="w-4 h-4 text-amber-600" />}
                 Slot {index + 1}
-                {role.isOwner && ' (Você)'}
+                {role.isOwner && ' (Você - Líder)'}
               </span>
             </div>
             
@@ -40,7 +40,6 @@ export const GroupRolesSection: React.FC<GroupRolesSectionProps> = ({
               <select
                 value={role.type}
                 onChange={(e) => onRoleChange(role.id, e.target.value as 'Coleta' | 'Ataque')}
-                disabled={role.isOwner}
                 className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors ${
                   role.isOwner ? 'bg-amber-50 border-amber-200' : 'border-gray-300'
                 }`}
@@ -52,7 +51,7 @@ export const GroupRolesSection: React.FC<GroupRolesSectionProps> = ({
               
               {role.isOwner && (
                 <p className="text-xs text-amber-600">
-                  Sua função pode ser alterada
+                  Como líder, você pode escolher qualquer função
                 </p>
               )}
             </div>
@@ -64,7 +63,7 @@ export const GroupRolesSection: React.FC<GroupRolesSectionProps> = ({
       
       <div className="mt-4 p-3 bg-blue-50 rounded-lg">
         <p className="text-sm text-blue-700">
-          💡 <strong>Dica:</strong> Defina as funções que você precisa no grupo. 
+          💡 <strong>Dica:</strong> O líder (você) pode escolher qualquer função. Defina as funções que você precisa no grupo. 
           O sistema encontrará jogadores compatíveis com base nos filtros abaixo.
         </p>
       </div>

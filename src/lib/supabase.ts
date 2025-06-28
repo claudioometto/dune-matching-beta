@@ -1,21 +1,37 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Configuração do Supabase
+// Configuração do Supabase com validação
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables');
+// Validação das variáveis de ambiente
+if (!supabaseUrl) {
+  console.error('VITE_SUPABASE_URL não encontrada nas variáveis de ambiente');
 }
 
-// Cliente Supabase singleton
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true
+if (!supabaseAnonKey) {
+  console.error('VITE_SUPABASE_ANON_KEY não encontrada nas variáveis de ambiente');
+}
+
+// Cliente Supabase singleton com fallback para desenvolvimento
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-key',
+  {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true
+    }
   }
-});
+);
+
+// Função para verificar se o Supabase está configurado
+export const isSupabaseConfigured = () => {
+  return !!(supabaseUrl && supabaseAnonKey && 
+    supabaseUrl !== 'https://placeholder.supabase.co' && 
+    supabaseAnonKey !== 'placeholder-key');
+};
 
 // Tipos do banco de dados (gerados automaticamente pelo Supabase)
 export type Database = {
@@ -32,6 +48,10 @@ export type Database = {
           tools: string[];
           interests: string[];
           desert_base: boolean;
+          email: string | null;
+          age: number | null;
+          server: string | null;
+          base_sector: string | null;
           created_at: string;
         };
         Insert: {
@@ -44,6 +64,10 @@ export type Database = {
           tools: string[];
           interests: string[];
           desert_base?: boolean;
+          email?: string | null;
+          age?: number | null;
+          server?: string | null;
+          base_sector?: string | null;
           created_at?: string;
         };
         Update: {
@@ -56,6 +80,10 @@ export type Database = {
           tools?: string[];
           interests?: string[];
           desert_base?: boolean;
+          email?: string | null;
+          age?: number | null;
+          server?: string | null;
+          base_sector?: string | null;
           created_at?: string;
         };
       };
@@ -156,6 +184,7 @@ export type Database = {
           id: string;
           nickname: string;
           name: string;
+          email: string | null;
           average_rating: number;
           total_ratings: number;
           positive_ratings: number;
@@ -174,6 +203,7 @@ export type Database = {
           created_at: string;
           host_nickname: string;
           host_name: string;
+          host_email: string | null;
           current_members: number;
         };
       };

@@ -57,6 +57,59 @@ const convertDbToFormData = (dbData: PlayerRow): PlayerData => {
 };
 
 /**
+ * Formatar mensagem de erro mais amigável
+ */
+const formatError = (error: any): string => {
+  if (!error) return 'Erro desconhecido';
+  
+  const message = error.message || error.toString();
+  
+  // Erros específicos do schema
+  if (message.includes("Could not find the 'age' column")) {
+    return 'Schema do banco desatualizado. Entre em contato com o administrador.';
+  }
+  
+  if (message.includes("Could not find the 'email' column")) {
+    return 'Schema do banco desatualizado. Entre em contato com o administrador.';
+  }
+  
+  // Erros de constraint
+  if (message.includes('duplicate key value violates unique constraint')) {
+    if (message.includes('nickname')) {
+      return 'Este nickname já está em uso por outro jogador.';
+    }
+    if (message.includes('email')) {
+      return 'Este email já está cadastrado.';
+    }
+    return 'Dados duplicados encontrados.';
+  }
+  
+  // Erros de validação
+  if (message.includes('check constraint')) {
+    if (message.includes('age')) {
+      return 'Idade deve estar entre 13 e 100 anos.';
+    }
+    if (message.includes('game_level')) {
+      return 'Level deve estar entre 1 e 60.';
+    }
+    return 'Dados inválidos fornecidos.';
+  }
+  
+  // Erros de permissão
+  if (message.includes('permission denied') || message.includes('RLS')) {
+    return 'Você não tem permissão para realizar esta operação.';
+  }
+  
+  // Erros de conexão
+  if (message.includes('network') || message.includes('connection')) {
+    return 'Erro de conexão. Verifique sua internet e tente novamente.';
+  }
+  
+  // Retornar mensagem original se não conseguir categorizar
+  return message;
+};
+
+/**
  * Serviço para operações com jogadores
  */
 export const playerService = {
@@ -73,10 +126,25 @@ export const playerService = {
         .select()
         .single();
 
-      return { data, error };
+      if (error) {
+        return { 
+          data: null, 
+          error: { 
+            ...error, 
+            message: formatError(error) 
+          } 
+        };
+      }
+
+      return { data, error: null };
     } catch (error) {
       console.error('Erro ao criar jogador:', error);
-      return { data: null, error };
+      return { 
+        data: null, 
+        error: { 
+          message: formatError(error) 
+        } 
+      };
     }
   },
 
@@ -91,10 +159,25 @@ export const playerService = {
         .eq('nickname', nickname)
         .single();
 
-      return { data, error };
+      if (error && error.code !== 'PGRST116') {
+        return { 
+          data: null, 
+          error: { 
+            ...error, 
+            message: formatError(error) 
+          } 
+        };
+      }
+
+      return { data, error: null };
     } catch (error) {
       console.error('Erro ao buscar jogador:', error);
-      return { data: null, error };
+      return { 
+        data: null, 
+        error: { 
+          message: formatError(error) 
+        } 
+      };
     }
   },
 
@@ -109,14 +192,30 @@ export const playerService = {
         .eq('email', email)
         .single();
 
-      return { data, error };
-    } catch (error) {
       // Se não encontrar, não é erro
       if (error?.code === 'PGRST116') {
         return { data: null, error: null };
       }
+
+      if (error) {
+        return { 
+          data: null, 
+          error: { 
+            ...error, 
+            message: formatError(error) 
+          } 
+        };
+      }
+
+      return { data, error: null };
+    } catch (error) {
       console.error('Erro ao buscar jogador por email:', error);
-      return { data: null, error };
+      return { 
+        data: null, 
+        error: { 
+          message: formatError(error) 
+        } 
+      };
     }
   },
 
@@ -131,14 +230,30 @@ export const playerService = {
         .eq('id', userId)
         .single();
 
-      return { data, error };
-    } catch (error) {
       // Se não encontrar, não é erro
       if (error?.code === 'PGRST116') {
         return { data: null, error: null };
       }
+
+      if (error) {
+        return { 
+          data: null, 
+          error: { 
+            ...error, 
+            message: formatError(error) 
+          } 
+        };
+      }
+
+      return { data, error: null };
+    } catch (error) {
       console.error('Erro ao buscar jogador por user ID:', error);
-      return { data: null, error };
+      return { 
+        data: null, 
+        error: { 
+          message: formatError(error) 
+        } 
+      };
     }
   },
 
@@ -156,10 +271,25 @@ export const playerService = {
         .select()
         .single();
 
-      return { data, error };
+      if (error) {
+        return { 
+          data: null, 
+          error: { 
+            ...error, 
+            message: formatError(error) 
+          } 
+        };
+      }
+
+      return { data, error: null };
     } catch (error) {
       console.error('Erro ao atualizar jogador:', error);
-      return { data: null, error };
+      return { 
+        data: null, 
+        error: { 
+          message: formatError(error) 
+        } 
+      };
     }
   },
 
@@ -173,10 +303,25 @@ export const playerService = {
         .select('*')
         .order('created_at', { ascending: false });
 
-      return { data, error };
+      if (error) {
+        return { 
+          data: null, 
+          error: { 
+            ...error, 
+            message: formatError(error) 
+          } 
+        };
+      }
+
+      return { data, error: null };
     } catch (error) {
       console.error('Erro ao listar jogadores:', error);
-      return { data: null, error };
+      return { 
+        data: null, 
+        error: { 
+          message: formatError(error) 
+        } 
+      };
     }
   },
 
@@ -205,10 +350,25 @@ export const playerService = {
 
       const { data, error } = await query.order('game_level', { ascending: false });
 
-      return { data, error };
+      if (error) {
+        return { 
+          data: null, 
+          error: { 
+            ...error, 
+            message: formatError(error) 
+          } 
+        };
+      }
+
+      return { data, error: null };
     } catch (error) {
       console.error('Erro ao buscar jogadores compatíveis:', error);
-      return { data: null, error };
+      return { 
+        data: null, 
+        error: { 
+          message: formatError(error) 
+        } 
+      };
     }
   },
 
@@ -223,10 +383,25 @@ export const playerService = {
         .eq('id', playerId)
         .single();
 
-      return { data, error };
+      if (error && error.code !== 'PGRST116') {
+        return { 
+          data: null, 
+          error: { 
+            ...error, 
+            message: formatError(error) 
+          } 
+        };
+      }
+
+      return { data, error: null };
     } catch (error) {
       console.error('Erro ao buscar reputação:', error);
-      return { data: null, error };
+      return { 
+        data: null, 
+        error: { 
+          message: formatError(error) 
+        } 
+      };
     }
   },
 

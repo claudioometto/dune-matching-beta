@@ -70,6 +70,14 @@ export const MyGroup: React.FC = () => {
     }).format(new Date(date));
   };
 
+  // Calcular vagas disponíveis (excluindo o líder)
+  const getAvailableSlots = (group: any) => {
+    const totalSlots = 4;
+    const leaderSlot = 1; // O líder sempre ocupa 1 slot
+    const occupiedSlots = 0; // Por enquanto, apenas o líder está no grupo
+    return totalSlots - leaderSlot - occupiedSlots;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen relative flex items-center justify-center">
@@ -109,82 +117,86 @@ export const MyGroup: React.FC = () => {
         <div className="max-w-6xl mx-auto">
           {activeGroups.length > 0 ? (
             <div className="space-y-8">
-              {activeGroups.map(group => (
-                <div key={group.id} className="relative">
-                  <div className="absolute inset-0 bg-gradient-to-r from-orange-500/20 to-amber-500/20 rounded-3xl blur-xl"></div>
-                  
-                  <div className="relative bg-black/50 backdrop-blur-md rounded-3xl shadow-2xl p-8 border border-orange-500/40">
-                    {/* Group Header */}
-                    <div className="flex items-center justify-between mb-6">
-                      <div className="flex items-center gap-3">
-                        <Crown className="w-6 h-6 text-amber-400" />
-                        <h2 className="text-2xl font-bold text-orange-200">{group.title}</h2>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Target className="w-5 h-5 text-amber-400" />
-                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                          group.resource_target === 'PvP' ? 'bg-red-900/50 text-red-200' : 'bg-green-900/50 text-green-200'
-                        }`}>
-                          {group.resource_target}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Group Info */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                      <div className="bg-amber-900/30 p-4 rounded-lg border border-amber-500/30">
-                        <div className="text-2xl font-bold text-amber-300">4</div>
-                        <div className="text-sm text-amber-200">Slots Totais</div>
-                      </div>
-                      <div className="bg-blue-900/30 p-4 rounded-lg border border-blue-500/30">
-                        <div className="text-2xl font-bold text-blue-300">0</div>
-                        <div className="text-sm text-blue-200">Interessados</div>
-                      </div>
-                      <div className="bg-green-900/30 p-4 rounded-lg border border-green-500/30">
-                        <div className="text-2xl font-bold text-green-300">4</div>
-                        <div className="text-sm text-green-200">Vagas Disponíveis</div>
-                      </div>
-                    </div>
-
-                    {/* Roles Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                      {group.roles_needed.map((role: string, index: number) => (
-                        <div key={index} className={`p-4 rounded-lg border-2 ${
-                          index === 0 ? 'bg-amber-900/30 border-amber-500/50' : 'bg-gray-900/30 border-gray-500/30'
-                        }`}>
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium text-orange-200">Slot {index + 1}</span>
-                            {index === 0 && <Crown className="w-4 h-4 text-amber-400" />}
-                          </div>
-                          <div className="text-sm text-orange-300 mb-1">Função: {role}</div>
-                          <div className="text-sm font-medium">
-                            {index === 0 ? (
-                              <span className="text-amber-300">Você (Líder)</span>
-                            ) : (
-                              <span className="text-gray-400">Vago</span>
-                            )}
-                          </div>
+              {activeGroups.map(group => {
+                const availableSlots = getAvailableSlots(group);
+                
+                return (
+                  <div key={group.id} className="relative">
+                    <div className="absolute inset-0 bg-gradient-to-r from-orange-500/20 to-amber-500/20 rounded-3xl blur-xl"></div>
+                    
+                    <div className="relative bg-black/50 backdrop-blur-md rounded-3xl shadow-2xl p-8 border border-orange-500/40">
+                      {/* Group Header */}
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-3">
+                          <Crown className="w-6 h-6 text-amber-400" />
+                          <h2 className="text-2xl font-bold text-orange-200">{group.title}</h2>
                         </div>
-                      ))}
-                    </div>
-
-                    {/* Group Actions */}
-                    <div className="flex justify-between items-center">
-                      <div className="text-sm text-orange-300">
-                        Criado em: {formatDate(group.created_at)}
+                        <div className="flex items-center gap-2">
+                          <Target className="w-5 h-5 text-amber-400" />
+                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                            group.resource_target === 'PvP' ? 'bg-red-900/50 text-red-200' : 'bg-green-900/50 text-green-200'
+                          }`}>
+                            {group.resource_target}
+                          </span>
+                        </div>
                       </div>
-                      
-                      <button
-                        onClick={() => setShowConfirmClose(group.id)}
-                        className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center gap-2"
-                      >
-                        <AlertTriangle className="w-5 h-5" />
-                        Encerrar Aliança
-                      </button>
+
+                      {/* Group Info - Corrigida a contagem */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div className="bg-amber-900/30 p-4 rounded-lg border border-amber-500/30">
+                          <div className="text-2xl font-bold text-amber-300">4</div>
+                          <div className="text-sm text-amber-200">Slots Totais</div>
+                        </div>
+                        <div className="bg-blue-900/30 p-4 rounded-lg border border-blue-500/30">
+                          <div className="text-2xl font-bold text-blue-300">0</div>
+                          <div className="text-sm text-blue-200">Interessados</div>
+                        </div>
+                        <div className="bg-green-900/30 p-4 rounded-lg border border-green-500/30">
+                          <div className="text-2xl font-bold text-green-300">{availableSlots}</div>
+                          <div className="text-sm text-green-200">Vagas Disponíveis</div>
+                        </div>
+                      </div>
+
+                      {/* Roles Grid */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                        {group.roles_needed.map((role: string, index: number) => (
+                          <div key={index} className={`p-4 rounded-lg border-2 ${
+                            index === 0 ? 'bg-amber-900/30 border-amber-500/50' : 'bg-gray-900/30 border-gray-500/30'
+                          }`}>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-medium text-orange-200">Slot {index + 1}</span>
+                              {index === 0 && <Crown className="w-4 h-4 text-amber-400" />}
+                            </div>
+                            <div className="text-sm text-orange-300 mb-1">Função: {role}</div>
+                            <div className="text-sm font-medium">
+                              {index === 0 ? (
+                                <span className="text-amber-300">Você (Líder)</span>
+                              ) : (
+                                <span className="text-gray-400">Vago</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Group Actions */}
+                      <div className="flex justify-between items-center">
+                        <div className="text-sm text-orange-300">
+                          Criado em: {formatDate(group.created_at)}
+                        </div>
+                        
+                        <button
+                          onClick={() => setShowConfirmClose(group.id)}
+                          className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center gap-2"
+                        >
+                          <AlertTriangle className="w-5 h-5" />
+                          Encerrar Aliança
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="relative">

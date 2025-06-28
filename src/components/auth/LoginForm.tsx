@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Shield, Mail, Lock, UserPlus, LogIn, AlertCircle, Key } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 import { ResetPasswordModal } from './ResetPasswordModal';
+import { isSupabaseConfigured } from '../../lib/supabase';
 
 export const LoginForm: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -14,6 +15,9 @@ export const LoginForm: React.FC = () => {
 
   const { signIn, signUp } = useAuth();
 
+  // Verificar se Supabase está configurado
+  const supabaseConfigured = isSupabaseConfigured();
+
   const validatePassword = (password: string): boolean => {
     return password.length >= 6;
   };
@@ -23,6 +27,13 @@ export const LoginForm: React.FC = () => {
     setLoading(true);
     setError('');
     setSuccess('');
+
+    // Verificar se Supabase está configurado
+    if (!supabaseConfigured) {
+      setError('Sistema de autenticação não configurado. Entre em contato com o administrador.');
+      setLoading(false);
+      return;
+    }
 
     // Validações
     if (!email || !password) {
@@ -100,6 +111,21 @@ export const LoginForm: React.FC = () => {
             </p>
           </div>
 
+          {/* Aviso se Supabase não estiver configurado */}
+          {!supabaseConfigured && (
+            <div className="bg-yellow-900/30 border border-yellow-500/50 rounded-lg p-3 mb-6">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-yellow-200 text-sm font-medium">Sistema em Modo Desenvolvimento</p>
+                  <p className="text-yellow-300/80 text-xs mt-1">
+                    Configure as variáveis VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY para ativar a autenticação.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Email */}
@@ -173,13 +199,13 @@ export const LoginForm: React.FC = () => {
             {/* Submit button */}
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !supabaseConfigured}
               className="group relative overflow-hidden w-full"
             >
               <div className="absolute inset-0 bg-gradient-to-r from-orange-400 via-amber-500 to-yellow-400 rounded-xl blur-lg opacity-60 group-hover:opacity-90 transition-opacity duration-500 animate-pulse"></div>
               
               <div className={`relative bg-gradient-to-r from-orange-600 via-amber-600 to-yellow-600 hover:from-orange-500 hover:via-amber-500 hover:to-yellow-500 text-white py-4 rounded-xl font-bold text-lg tracking-wider transition-all duration-300 transform group-hover:scale-105 shadow-2xl border-2 border-orange-400/50 flex items-center justify-center gap-3 ${
-                loading ? 'opacity-75 cursor-not-allowed' : ''
+                loading || !supabaseConfigured ? 'opacity-75 cursor-not-allowed' : ''
               }`}>
                 {loading ? (
                   <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
@@ -193,7 +219,7 @@ export const LoginForm: React.FC = () => {
             </button>
 
             {/* Forgot password link */}
-            {isLogin && (
+            {isLogin && supabaseConfigured && (
               <div className="text-center">
                 <button
                   type="button"
@@ -207,25 +233,27 @@ export const LoginForm: React.FC = () => {
             )}
 
             {/* Toggle mode */}
-            <div className="text-center">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsLogin(!isLogin);
-                  setError('');
-                  setSuccess('');
-                }}
-                className="text-orange-300 hover:text-orange-200 text-sm tracking-wide transition-colors"
-              >
-                {isLogin ? 'Não possui acesso? Registre-se' : 'Já possui acesso? Entre'}
-              </button>
-            </div>
+            {supabaseConfigured && (
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsLogin(!isLogin);
+                    setError('');
+                    setSuccess('');
+                  }}
+                  className="text-orange-300 hover:text-orange-200 text-sm tracking-wide transition-colors"
+                >
+                  {isLogin ? 'Não possui acesso? Registre-se' : 'Já possui acesso? Entre'}
+                </button>
+              </div>
+            )}
           </form>
         </div>
       </div>
 
       {/* Reset Password Modal */}
-      {showResetModal && (
+      {showResetModal && supabaseConfigured && (
         <ResetPasswordModal
           onClose={() => setShowResetModal(false)}
         />

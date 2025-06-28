@@ -9,7 +9,8 @@ export const REQUIRED_TOOLS = [
   'Ferramentas de Especiaria'
 ];
 
-export const MIN_LEVEL_OPTIONS = Array.from({ length: 60 }, (_, i) => (i + 1).toString());
+// Ajustado para níveis de 1 a 200
+export const MIN_LEVEL_OPTIONS = Array.from({ length: 200 }, (_, i) => (i + 1).toString());
 
 // Reuse equipment tiers from existing constants
 export const FILTER_EQUIPMENT_TIERS = [

@@ -41,29 +41,45 @@ const AppContent: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewType>('player');
   const { user, signOut, loading } = useAuth();
 
-  // Get environment from Vite env vars
+  // Get environment from Vite env vars with fallback
   const environment = import.meta.env.VITE_ENV || import.meta.env.ENV || 'BETA';
 
   const handleSignOut = async () => {
-    await signOut();
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Erro ao fazer logout:', error);
+    }
   };
 
   const renderCurrentView = () => {
-    switch (currentView) {
-      case 'player':
-        return <PlayerForm />; // Cadastro completo do jogador
-      case 'group':
-        return <GroupAdForm />; // Criação de anúncios de grupo
-      case 'notifications':
-        return <NotificationList />; // Convites recebidos
-      case 'mygroup':
-        return <MyGroup />; // Gerenciamento do grupo ativo
-      case 'rate':
-        return <RatePlayers />; // Avaliação pós-grupo (30 min)
-      case 'profile':
-        return <PlayerProfile />; // Perfil público com reputação
-      default:
-        return <PlayerForm />;
+    try {
+      switch (currentView) {
+        case 'player':
+          return <PlayerForm />; // Cadastro completo do jogador
+        case 'group':
+          return <GroupAdForm />; // Criação de anúncios de grupo
+        case 'notifications':
+          return <NotificationList />; // Convites recebidos
+        case 'mygroup':
+          return <MyGroup />; // Gerenciamento do grupo ativo
+        case 'rate':
+          return <RatePlayers />; // Avaliação pós-grupo (30 min)
+        case 'profile':
+          return <PlayerProfile />; // Perfil público com reputação
+        default:
+          return <PlayerForm />;
+      }
+    } catch (error) {
+      console.error('Erro ao renderizar view:', error);
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-black">
+          <div className="text-center text-orange-200">
+            <h2 className="text-2xl font-bold mb-4">Erro no Sistema</h2>
+            <p>Ocorreu um erro inesperado. Recarregue a página.</p>
+          </div>
+        </div>
+      );
     }
   };
 
@@ -102,7 +118,7 @@ const AppContent: React.FC = () => {
         <div 
           className="absolute inset-0 bg-cover bg-center bg-no-repeat"
           style={{
-            backgroundImage: `url('/ChatGPT Image 28 de jun. de 2025, 12_03_17.png')`
+            backgroundImage: `url('https://images.pexels.com/photos/2387793/pexels-photo-2387793.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080&fit=crop')`
           }}
         ></div>
         
@@ -133,11 +149,11 @@ const AppContent: React.FC = () => {
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-amber-600 rounded-full flex items-center justify-center">
                 <span className="text-white font-bold text-sm">
-                  {user.email?.charAt(0).toUpperCase()}
+                  {user.email?.charAt(0).toUpperCase() || 'U'}
                 </span>
               </div>
               <div>
-                <p className="text-orange-200 font-medium">{user.email}</p>
+                <p className="text-orange-200 font-medium">{user.email || 'Usuário'}</p>
                 <p className="text-orange-300/70 text-xs">Guerreiro Autenticado</p>
               </div>
             </div>
@@ -254,11 +270,29 @@ const AppContent: React.FC = () => {
 };
 
 function App() {
-  return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
-  );
+  try {
+    return (
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    );
+  } catch (error) {
+    console.error('Erro crítico na aplicação:', error);
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-center text-orange-200">
+          <h1 className="text-3xl font-bold mb-4">Sistema Temporariamente Indisponível</h1>
+          <p className="mb-4">Ocorreu um erro crítico no sistema imperial.</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="bg-orange-600 hover:bg-orange-500 text-white px-6 py-3 rounded-lg font-medium"
+          >
+            Recarregar Sistema
+          </button>
+        </div>
+      </div>
+    );
+  }
 }
 
 export default App;

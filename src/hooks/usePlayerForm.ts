@@ -23,6 +23,8 @@ const initialFormData: PlayerData = {
 export const usePlayerForm = () => {
   const [formData, setFormData] = useState<PlayerData>(initialFormData);
   const [gameIdLocked, setGameIdLocked] = useState(false);
+  const [isRegistered, setIsRegistered] = useState(false); // Novo estado para controlar se já está cadastrado
+  const [isEditMode, setIsEditMode] = useState(false); // Novo estado para modo de edição
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
@@ -41,9 +43,11 @@ export const usePlayerForm = () => {
           const playerFormData = playerService.convertDbToFormData(existingPlayer);
           setFormData({ ...playerFormData, email: user.email });
           setGameIdLocked(true);
+          setIsRegistered(true); // Jogador já está cadastrado
         } else {
           // Novo jogador - preencher email automaticamente
           setFormData(prev => ({ ...prev, email: user.email }));
+          setIsRegistered(false);
         }
       } catch (error) {
         console.error('Erro ao carregar dados do jogador:', error);
@@ -54,7 +58,12 @@ export const usePlayerForm = () => {
   }, [user]);
 
   const handleInputChange = (field: keyof PlayerData, value: any) => {
-    if (field === 'gameId' && gameIdLocked) return;
+    // Restrições no modo de edição
+    if (isEditMode && (field === 'gameId' || field === 'nickname' || field === 'email')) {
+      return; // Não permite editar esses campos no modo de edição
+    }
+    
+    if (field === 'gameId' && gameIdLocked && !isEditMode) return;
     if (field === 'email') return; // Email não pode ser editado (vem da autenticação)
     
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -71,6 +80,11 @@ export const usePlayerForm = () => {
       : [...formData.interests, interest];
     
     handleInputChange('interests', newInterests);
+  };
+
+  const toggleEditMode = () => {
+    setIsEditMode(!isEditMode);
+    setErrors({}); // Limpar erros ao alternar modo
   };
 
   const validateForm = (): boolean => {
@@ -97,10 +111,10 @@ export const usePlayerForm = () => {
       newErrors.age = 'Idade deve ser entre 13 e 100 anos';
     }
 
-    // Level validation
+    // Level validation - Ajustado para 1-200
     const level = parseInt(formData.level);
-    if (formData.level && (isNaN(level) || level < 1 || level > 60)) {
-      newErrors.level = 'Level deve ser entre 1 e 60';
+    if (formData.level && (isNaN(level) || level < 1 || level > 200)) {
+      newErrors.level = 'Level deve ser entre 1 e 200';
     }
 
     // Nickname uniqueness check (será feito no servidor)
@@ -143,6 +157,7 @@ export const usePlayerForm = () => {
         
         console.log('✅ Jogador atualizado no Supabase:', data);
         alert('🏜️ Cadastro atualizado com sucesso no sistema imperial!');
+        setIsEditMode(false); // Sair do modo de edição após salvar
       } else {
         // Criar novo jogador
         const { data, error } = await playerService.createPlayer(formData, user.id);
@@ -158,7 +173,8 @@ export const usePlayerForm = () => {
         }
         
         console.log('✅ Jogador criado no Supabase:', data);
-        alert('🏜️ Guerreiro registrado com sucesso no sistema imperial!');
+        alert('🏜️ Cadastro finalizado com sucesso! Guerreiro registrado no sistema imperial!');
+        setIsRegistered(true); // Marcar como registrado
       }
       
       // Lock the game ID after successful save
@@ -180,10 +196,13 @@ export const usePlayerForm = () => {
   return {
     formData,
     gameIdLocked,
+    isRegistered,
+    isEditMode,
     errors,
     loading,
     handleInputChange,
     handleInterestToggle,
+    toggleEditMode,
     handleSubmit
   };
 };
